@@ -44,6 +44,7 @@ unsigned int Cpu_::ALUoperation(unsigned int a, unsigned int b, Instruction ins)
 
 void Cpu_::ins_exec(Instruction ins)
 {
+	sig_abort_exec1 = false;
 	switch (ins.rType.opcode)
 	{
 	case OP_ALU:
@@ -131,19 +132,23 @@ void Cpu_::ins_exec(Instruction ins)
 			if_jmp = regs.x[ins.bType.rs1] >= regs.x[ins.bType.rs2];
 			break;
 		}
-		if (if_jmp)
+		if (if_jmp) {
 			regs.pc += static_cast<int>(immgen(ins));
+			sig_abort_exec1 = true;
+		}
 	}
 	break;
 	case OP_JAL:
 		if (ins.jType.rd != 0)
 			regs.x[ins.jType.rd] = regs.pc + 4;
 		regs.pc += static_cast<int>(immgen(ins));
+		sig_abort_exec1 = true;
 		break;
 	case OP_JALR:
 		if (ins.iType.rd != 0)
 			regs.x[ins.iType.rd] = regs.pc + 4;
 		regs.pc = static_cast<int>(regs.x[ins.iType.rs1]) + static_cast<int>(immgen(ins));
+		sig_abort_exec1 = true;
 		break;
 	case OP_LUI:
 		if (ins.uType.rd != 0)
@@ -155,14 +160,31 @@ void Cpu_::ins_exec(Instruction ins)
 			regs.x[ins.uType.rd] = regs.pc +
 			static_cast<int>(immgen(ins));
 		break;
+	case OP_SYSTEM:
+
+		break;
 	default://TODO
 		break;
 	}
+	if (!sig_abort_exec1)  regs.pc += 4;
 }
 
-void Cpu_::_into_trap(tagCSR::tagmcause cause)
+void Cpu_::_into_trap(tagCSR::tagmcause cause, unsigned int mtval)
 {
 	*reinterpret_cast<tagCSR::tagmcause*>(&CSRs[(int)CSRid::mcause]) = cause;
+	CSRs[(int)CSRid::mepc] = regs.pc;
+	if (cause.Interrupt == 0 && 
+		(cause.exception_code == 8 || cause.exception_code == 9 || cause.exception_code == 11))
+		CSRs[(int)CSRid::mepc] += 4;
+	CSRs[(int)CSRid::mtval] = mtval;
+	auto mst = reinterpret_cast<tagCSR::tagmstatus*>(&CSRs[(int)CSRid::mstatus]);
+	mst->MPIE = mst->MIE;
+	mst->MIE = 0;
+	mst->MPP = mflags.MP;
+	if (reinterpret_cast<tagCSR::tagmtvec*>(&CSRs[(int)CSRid::mtvec])->mode == 1 
+		&& cause.Interrupt == 1)regs.pc = reinterpret_cast<tagCSR::tagmtvec*>(&CSRs[(int)CSRid::mtvec])->base +
+		cause.exception_code * 4;
+	else regs.pc = reinterpret_cast<tagCSR::tagmtvec*>(&CSRs[(int)CSRid::mtvec])->base;
 }
 
 unsigned int immgen(Instruction ins)

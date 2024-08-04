@@ -2,14 +2,9 @@
 #define mCPUH
 #include "mem.h"
 #define RV32_
-
-inline unsigned int bl_endian_switch(unsigned int val) {
-	unsigned int ret = val << 24;
-	ret |= val >> 24;
-	ret |= (val & 0x00ff0000) >> 8;
-	ret |= (val & 0x0000ff00) << 8;
-	return ret;
-}
+#define MODE_USR 0
+#define MODE_SUPER 1
+#define MODE_MACHINE 3
 
 namespace tagCSR {
 	struct tagmtvec
@@ -201,11 +196,17 @@ public:
 
 private:
 	REGS regs;
+	bool sig_abort_exec1;
 	unsigned int CSRs[4096];
+	struct
+	{
+		unsigned int MP : 2;
+		unsigned int reserved : 30;
+	}mflags;
 	MemController memctrl;
 	unsigned int ALUoperation(unsigned int a, unsigned int b, Instruction ins);
 	void ins_exec(Instruction ins);
-	void _into_trap(tagCSR::tagmcause cause);
+	void _into_trap(tagCSR::tagmcause cause, unsigned int mtval);
 };
 
 #endif
