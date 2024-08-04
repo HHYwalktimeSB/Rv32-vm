@@ -128,11 +128,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="mem.cpp" />
+    <ClCompile Include="simdops.cpp" />
     <ClCompile Include="test.cpp" />
     <ClCompile Include="_cpu.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="mem.h" />
+    <ClInclude Include="simdops.h" />
     <ClInclude Include="_cpu.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
