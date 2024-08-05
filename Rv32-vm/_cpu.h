@@ -5,6 +5,13 @@
 #define MODE_USR 0
 #define MODE_SUPER 1
 #define MODE_MACHINE 3
+#define MASK_STAP_MODE 0x80000000
+#define MASK_STAP_ASID 0x7fc00000
+#define MASK_STAP_PPN 0x3fffff
+
+//TODO
+#define CSR_HAVE_FLAG_SUM true
+//TODO
 
 namespace tagCSR {
 	struct tagmtvec
@@ -77,6 +84,9 @@ enum CSRid {
 	hpmcounter4h = 0xc84, //URO
 	//...
 #endif 
+
+	//S level
+	stap = 0x180, //SRW
 
 	//machine level
 
@@ -176,10 +186,44 @@ union Instruction
 
 unsigned int immgen(Instruction ins);
 
+#define MEME_OK 0
+#define MEME_ADDR_NOT_ALIGNED 1
+#define MEME_ACCESS_DENIED 2
+#define MEME_PAGE_FAULT 3
+#define IOF_READ 0
+#define IOF_WRITE 1
+#define IOF_EXEC 2
+#define IOF_USR 4
+
+ 
+class Memioresult {
+public:
+	unsigned int val;
+	int ecode;
+	inline constexpr Memioresult(unsigned int v,int ec ):val(v),ecode
+	(ec){	}
+	inline Memioresult(unsigned long long i64val) {
+		val = i64val >> 32;
+		ecode = i64val & 0xffffffff;
+	}
+	inline unsigned long long i64resforregret()const {
+		unsigned long long res = ((unsigned long long )val) << 32;
+		res |= ecode;
+		return res;
+	}
+	inline static int getecode(unsigned long long i64val) {
+		return i64val & 0xffffffff;
+	}
+	inline static unsigned int getval(unsigned long long i64val) {
+		return i64val >> 32;
+	}
+};
+
 class MemController {
-	REGS* cpuregs;//todo
+	unsigned int* cpuCSRs;
 	myMem memory;
 public:
+	unsigned long long vaddr_to_paddr(unsigned int addr, int io_flag) ;//assume can access
 	unsigned int read32(unsigned int addr);
 	unsigned int read16(unsigned int addr);
 	unsigned int read8(unsigned int addr);

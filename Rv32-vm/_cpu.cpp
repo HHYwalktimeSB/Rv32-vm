@@ -1,4 +1,7 @@
 #include "_cpu.h"
+#define MASK_PPN_1 0xfff00000
+
+#define MAKE_MEM_RW_RESULT_OK(_VAL_) ((unsigned long long)(_VAL_))<<32
 
 unsigned int Cpu_::ALUoperation(unsigned int a, unsigned int b, Instruction ins)
 {
@@ -223,6 +226,80 @@ unsigned int immgen(Instruction ins)
 		break;
 	}
 	return ret;
+}
+
+unsigned int __fastcall chk_can_rw_(unsigned int pe, int io_flag) {
+	if (!reinterpret_cast<sv32pagetable_entry*>(&pe)->V)return MEME_PAGE_FAULT;
+	switch (io_flag & 3)
+	{
+	case IOF_READ:
+		if (!(reinterpret_cast<sv32pagetable_entry*>(&pe)->R)) return MEME_ACCESS_DENIED;
+		if (io_flag & IOF_USR) {
+			if (!(reinterpret_cast<sv32pagetable_entry*>(&pe)->U)) return MEME_ACCESS_DENIED;
+		}
+		else
+		{
+			if (reinterpret_cast<sv32pagetable_entry*>(&pe)->U &&
+				!CSR_HAVE_FLAG_SUM)return MEME_ACCESS_DENIED;
+		}
+		break;
+	case IOF_WRITE:
+		if (!(reinterpret_cast<sv32pagetable_entry*>(&pe)->W)) return MEME_ACCESS_DENIED;
+		if (io_flag & IOF_USR) {
+			if (!(reinterpret_cast<sv32pagetable_entry*>(&pe)->U)) return MEME_ACCESS_DENIED;
+		}
+		else
+		{
+			if (reinterpret_cast<sv32pagetable_entry*>(&pe)->U &&
+				!CSR_HAVE_FLAG_SUM)return MEME_ACCESS_DENIED;
+		}
+		break;
+	case IOF_EXEC:
+		if (!(reinterpret_cast<sv32pagetable_entry*>(&pe)->X)) return MEME_ACCESS_DENIED;
+		if (io_flag & IOF_USR) {
+			if (!(reinterpret_cast<sv32pagetable_entry*>(&pe)->U)) return MEME_ACCESS_DENIED;
+		}
+		else
+		{
+			if (reinterpret_cast<sv32pagetable_entry*>(&pe)->U)return MEME_ACCESS_DENIED;
+		}
+		break;
+	}
+	return 0;
+}
+
+unsigned long long MemController::vaddr_to_paddr(unsigned int addr, int io_flag)
+{
+	unsigned int pmemaddr = (cpuCSRs[(int)CSRid::stap] & MASK_STAP_PPN )<< 10;
+	pmemaddr |= (reinterpret_cast<tagVaddr*>(&addr)->vpn_1);
+	pmemaddr <<= 2;
+	auto pe = memory._readp32(pmemaddr);
+	unsigned int rx;
+	if (pe & MASK_XWR)
+	{//LARGE PAGE
+		if ((rx = chk_can_rw_(pe, io_flag))) return rx;
+		//set flags
+		reinterpret_cast<sv32pagetable_entry*>(&pe)->A = 1;
+		if ((io_flag & 3) == IOF_WRITE)
+			reinterpret_cast<sv32pagetable_entry*>(&pe)->D = 1;
+		memory._writep32(pmemaddr, pe);
+		//make 4m page paddr
+		return MAKE_MEM_RW_RESULT_OK(((pe & MASK_PPN_1) << 2) |
+			(addr & (MASK_VPN_0 | MASK_OFFSET4K)));
+	}else if (!reinterpret_cast<sv32pagetable_entry*>(&pe)->V)return MEME_PAGE_FAULT;
+	//2nd entry
+	pmemaddr = pe & (MASK_PPN_1 | MASK_VPN_0);
+	pmemaddr = reinterpret_cast<tagVaddr*>(&addr)->vpn_0;
+	pe = memory._readp32(pmemaddr);
+	if ((rx = chk_can_rw_(pe, io_flag)))return rx;
+	//set flags
+	reinterpret_cast<sv32pagetable_entry*>(&pe)->A = 1;
+	if ((io_flag & 3) == IOF_WRITE)
+		reinterpret_cast<sv32pagetable_entry*>(&pe)->D = 1;
+	memory._writep32(pmemaddr, pe);
+	//make 4k page paddr
+	return MAKE_MEM_RW_RESULT_OK(((pe & (MASK_PPN_1|MASK_VPN_0)) << 2) |
+		(addr &  MASK_OFFSET4K));
 }
 
 unsigned int MemController::read32(unsigned int addr)
