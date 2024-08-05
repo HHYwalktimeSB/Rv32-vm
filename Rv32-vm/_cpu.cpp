@@ -2,6 +2,20 @@
 #define MASK_PPN_1 0xfff00000
 
 #define MAKE_MEM_RW_RESULT_OK(_VAL_) ((unsigned long long)(_VAL_))<<32
+#define GET_MEM_RW_RESULT_VAL(_VAL_) ((unsigned int)(_VAL_>>32))
+
+void Cpu_::_init()
+{
+	regs.pc = 0;
+	for (auto i = 0; i < 32; i++)
+		regs.x[i] = 0;
+	for (auto i = 0; i < 4096; i++)
+		CSRs[i] = 0;
+	Mode = MODE_MACHINE;
+	*reinterpret_cast<unsigned int*>(&debugflags) = 0;
+	debugflags.flag_run = 1;
+	debugflags.one_step = 1;
+}
 
 unsigned int Cpu_::ALUoperation(unsigned int a, unsigned int b, Instruction ins)
 {
@@ -47,7 +61,6 @@ unsigned int Cpu_::ALUoperation(unsigned int a, unsigned int b, Instruction ins)
 
 void Cpu_::ins_exec(Instruction ins)
 {
-	sig_abort_exec1 = false;
 	switch (ins.rType.opcode)
 	{
 	case OP_ALU:
@@ -62,51 +75,87 @@ void Cpu_::ins_exec(Instruction ins)
 		break;
 	case OP_LOAD:
 	{
+		unsigned long long _ret_buf;
+		unsigned int addr = static_cast<int>(regs.x[ins.iType.rs1]) + static_cast<int>(immgen(ins));
 		switch (ins.iType.funct3)
 		{
 		case 0://lb
-			if (ins.iType.rd != 0)
-				regs.x[ins.iType.rd] = _sign_ext<8>(memctrl.read8(
-					static_cast<int>(regs.x[ins.iType.rs1]) + static_cast<int>(immgen(ins))));
+			_ret_buf = memctrl.read8(addr, Mode);
+			if (_ret_buf & 0xffffffff) {
+				_make_mem_exception(_ret_buf & 0xffffffff, IOF_READ);
+				CSRs[(int)CSRid::mtval] = addr;
+				EXEC_INS1_ABORT;
+			}
+			if (ins.iType.rd != 0) regs.x[ins.iType.rd] = _sign_ext<8>(GET_MEM_RW_RESULT_VAL(_ret_buf));
 			break;
 		case 1:
-			if (ins.iType.rd != 0)
-				regs.x[ins.iType.rd] = _sign_ext<16>(memctrl.read16(
-					static_cast<int>(regs.x[ins.iType.rs1]) + static_cast<int>(immgen(ins))));
+			_ret_buf = memctrl.read16(addr, Mode);
+			if (_ret_buf & 0xffffffff) {
+				_make_mem_exception(_ret_buf & 0xffffffff,IOF_READ);
+				CSRs[(int)CSRid::mtval] = addr;
+				EXEC_INS1_ABORT;
+			}
+			if (ins.iType.rd != 0) regs.x[ins.iType.rd] = _sign_ext<16>(GET_MEM_RW_RESULT_VAL(_ret_buf));
 			break;
 		case 2:
-			if (ins.iType.rd != 0)
-				regs.x[ins.iType.rd] = memctrl.read32(
-					static_cast<int>(regs.x[ins.iType.rs1]) + static_cast<int>(immgen(ins)));
+			_ret_buf = memctrl.read32(addr, Mode);
+			if (_ret_buf & 0xffffffff) {
+				_make_mem_exception(_ret_buf & 0xffffffff,IOF_READ);
+				CSRs[(int)CSRid::mtval] = addr;
+				EXEC_INS1_ABORT;
+			}
+			if (ins.iType.rd != 0) regs.x[ins.iType.rd] =GET_MEM_RW_RESULT_VAL(_ret_buf);
 			break;
 		case 3:
-			if (ins.iType.rd != 0)
-				regs.x[ins.iType.rd] = memctrl.read8(
-					static_cast<int>(regs.x[ins.iType.rs1]) + static_cast<int>(immgen(ins)));
+			_ret_buf = memctrl.read32(addr, Mode);
+			if (_ret_buf & 0xffffffff) {
+				_make_mem_exception(_ret_buf & 0xffffffff, IOF_READ);
+				CSRs[(int)CSRid::mtval] = addr;
+				EXEC_INS1_ABORT;
+			}
+			if (ins.iType.rd != 0) regs.x[ins.iType.rd] = GET_MEM_RW_RESULT_VAL(_ret_buf);
 			break;
 		case 4:
-			if (ins.iType.rd != 0)
-				regs.x[ins.iType.rd] = memctrl.read16(
-					static_cast<int>(regs.x[ins.iType.rs1]) + static_cast<int>(immgen(ins)));
+			_ret_buf = memctrl.read32(addr, Mode);
+			if (_ret_buf & 0xffffffff) {
+				_make_mem_exception(_ret_buf & 0xffffffff, IOF_READ);
+				CSRs[(int)CSRid::mtval] = addr;
+				EXEC_INS1_ABORT;
+			}
+			if (ins.iType.rd != 0) regs.x[ins.iType.rd] = GET_MEM_RW_RESULT_VAL(_ret_buf);
 			break;
 		}
 	}
 	break;
 	case OP_STORE: 
 	{
+		unsigned int _ret_buf;
+		unsigned int addr = static_cast<int>(regs.x[ins.sType.rs1]) + static_cast<int>(immgen(ins));
 		switch (ins.sType.funct3)
 		{
 		case 0:
-			memctrl.write8(static_cast<int>(regs.x[ins.sType.rs1]) + static_cast<int>(immgen(ins))
-				, regs.x[ins.sType.rs2]);
+			_ret_buf = memctrl.write8(addr, regs.x[ins.sType.rs2], Mode);
+			if (_ret_buf != 0) {
+				_make_mem_exception(_ret_buf, IOF_WRITE);
+				CSRs[(int)CSRid::mtval] = addr;
+				EXEC_INS1_ABORT;
+			}
 			break;
 		case 1:
-			memctrl.write16(static_cast<int>(regs.x[ins.sType.rs1]) + static_cast<int>(immgen(ins))
-				, regs.x[ins.sType.rs2]);
+			_ret_buf = memctrl.write16(addr, regs.x[ins.sType.rs2], Mode);
+			if (_ret_buf != 0) {
+				_make_mem_exception(_ret_buf, IOF_WRITE);
+				CSRs[(int)CSRid::mtval] = addr;
+				EXEC_INS1_ABORT;
+			}
 			break;
 		case 3:
-			memctrl.write32(static_cast<int>(regs.x[ins.sType.rs1]) + static_cast<int>(immgen(ins))
-				, regs.x[ins.sType.rs2]);
+			_ret_buf = memctrl.write32(addr, regs.x[ins.sType.rs2], Mode);
+			if (_ret_buf != 0) {
+				_make_mem_exception(_ret_buf, IOF_WRITE);
+				CSRs[(int)CSRid::mtval] = addr;
+				EXEC_INS1_ABORT;
+			}
 			break;
 		}
 	}
@@ -137,7 +186,7 @@ void Cpu_::ins_exec(Instruction ins)
 		}
 		if (if_jmp) {
 			regs.pc += static_cast<int>(immgen(ins));
-			sig_abort_exec1 = true;
+			EXEC_INS1_ABORT;
 		}
 	}
 	break;
@@ -145,14 +194,12 @@ void Cpu_::ins_exec(Instruction ins)
 		if (ins.jType.rd != 0)
 			regs.x[ins.jType.rd] = regs.pc + 4;
 		regs.pc += static_cast<int>(immgen(ins));
-		sig_abort_exec1 = true;
-		break;
+		EXEC_INS1_ABORT;
 	case OP_JALR:
 		if (ins.iType.rd != 0)
 			regs.x[ins.iType.rd] = regs.pc + 4;
 		regs.pc = static_cast<int>(regs.x[ins.iType.rs1]) + static_cast<int>(immgen(ins));
-		sig_abort_exec1 = true;
-		break;
+		EXEC_INS1_ABORT;
 	case OP_LUI:
 		if (ins.uType.rd != 0)
 			regs.x[ins.uType.rd] =
@@ -164,30 +211,99 @@ void Cpu_::ins_exec(Instruction ins)
 			static_cast<int>(immgen(ins));
 		break;
 	case OP_SYSTEM:
-
 		break;
 	default://TODO
+		_make_exception(EXC_INV_INSTRUCTION);
+		EXEC_INS1_ABORT;
 		break;
 	}
-	if (!sig_abort_exec1)  regs.pc += 4;
+	regs.pc += 4;
 }
 
-void Cpu_::_into_trap(tagCSR::tagmcause cause, unsigned int mtval)
+void Cpu_::_into_trap(tagCSR::tagmcause cause)
 {
 	*reinterpret_cast<tagCSR::tagmcause*>(&CSRs[(int)CSRid::mcause]) = cause;
 	CSRs[(int)CSRid::mepc] = regs.pc;
 	if (cause.Interrupt == 0 && 
 		(cause.exception_code == 8 || cause.exception_code == 9 || cause.exception_code == 11))
 		CSRs[(int)CSRid::mepc] += 4;
-	CSRs[(int)CSRid::mtval] = mtval;
 	auto mst = reinterpret_cast<tagCSR::tagmstatus*>(&CSRs[(int)CSRid::mstatus]);
 	mst->MPIE = mst->MIE;
 	mst->MIE = 0;
-	mst->MPP = mflags.MP;
+	mst->MPP = Mode;
 	if (reinterpret_cast<tagCSR::tagmtvec*>(&CSRs[(int)CSRid::mtvec])->mode == 1 
 		&& cause.Interrupt == 1)regs.pc = reinterpret_cast<tagCSR::tagmtvec*>(&CSRs[(int)CSRid::mtvec])->base +
 		cause.exception_code * 4;
 	else regs.pc = reinterpret_cast<tagCSR::tagmtvec*>(&CSRs[(int)CSRid::mtvec])->base;
+}
+
+void Cpu_::_make_exception(int code, bool is_int)
+{
+	this->exeption.exception_code = code;
+	this->exeption.Interrupt = is_int;
+	this->debugflags.flag_int = 1;
+}
+
+void Cpu_::_make_mem_exception(unsigned int meme_code, unsigned io_code)
+{
+	switch (meme_code)
+	{
+	case MEME_ADDR_NOT_ALIGNED:
+		if (io_code == IOF_READ)_make_exception(EXC_LOAD_ADDR_NOT_ALIGNED);
+		else _make_exception(EXC_STORE_ADDR_NOT_ALIGNED);
+		break;
+	case MEME_ACCESS_DENIED:
+		if (io_code == IOF_READ) _make_exception(EXC_LOAD_ACCESS_FAULT);
+		else _make_exception(EXC_STORE_ACCESS_FAULT);
+		break;
+	case MEME_PAGE_FAULT:
+		if (io_code == IOF_READ)_make_exception(EXC_LOAD_PAGE_FAULT);
+		else _make_exception(EXC_STORE_PAGE_FAULT);
+		break;
+	default:
+		break;
+	}
+}
+
+void Cpu_::runsync()
+{
+	unsigned long long result;
+	Instruction ins;
+	while (debugflags.flag_run)
+	{
+		result = memctrl.read_ins(regs.pc, Mode);
+		switch (result&0xffffffff)
+		{
+		case MEME_OK:
+			*reinterpret_cast<unsigned int*>(&ins) = GET_MEM_RW_RESULT_VAL(result);
+			this->ins_exec(ins);
+				break;
+		case	MEME_ACCESS_DENIED:
+			_make_exception(EXC_INSTRUCTION_ACCESS_FAULT);
+			break;
+		case	MEME_ADDR_NOT_ALIGNED:
+			_make_exception(EXC_INSTRUCTION_ADDR_NOT_ALIGNED);
+			break;
+		case MEME_PAGE_FAULT:
+			_make_exception(EXC_INSTRUCTION_PAGE_FAULT);
+			break;
+		default:
+			break;
+		}
+		if (debugflags.flag_int) {
+			debugflags.flag_int = 0;
+			_into_trap(exeption);
+		}
+		if (debugflags.one_step) {
+			std::string str;
+			std::cin >> str;
+
+		}
+	}
+}
+
+Cpu_::Cpu_(unsigned int mem_sz):memctrl(mem_sz)
+{
 }
 
 unsigned int immgen(Instruction ins)
@@ -268,6 +384,19 @@ unsigned int __fastcall chk_can_rw_(unsigned int pe, int io_flag) {
 	return 0;
 }
 
+unsigned long long MemController::read_ins(unsigned int addr, unsigned int mode)
+{
+	if ((addr & 3) != 0)return MEME_ADDR_NOT_ALIGNED;
+	unsigned long long ret;
+	if (mode != 3 && (cpuCSRs[(int)CSRid::stap] & MASK_STAP_MODE)) {
+		ret = vaddr_to_paddr(addr, IOF_EXEC | (mode == MODE_USR ? IOF_USR : 0));
+		if ((ret & 0xffffffff) == 0) ret = MAKE_MEM_RW_RESULT_OK(memory._readp32(
+			GET_MEM_RW_RESULT_VAL(ret)));
+	}
+	else ret = MAKE_MEM_RW_RESULT_OK(memory._readp32(addr));
+	return ret;
+}
+
 unsigned long long MemController::vaddr_to_paddr(unsigned int addr, int io_flag)
 {
 	unsigned int pmemaddr = (cpuCSRs[(int)CSRid::stap] & MASK_STAP_PPN )<< 10;
@@ -302,32 +431,83 @@ unsigned long long MemController::vaddr_to_paddr(unsigned int addr, int io_flag)
 		(addr &  MASK_OFFSET4K));
 }
 
-unsigned int MemController::read32(unsigned int addr)
+unsigned long long MemController::read32(unsigned int addr, unsigned int mode)
 {
-	return this->memory._readp32(addr);
+	if ((addr & 3) != 0)return MEME_ADDR_NOT_ALIGNED;
+	unsigned long long ret;
+	if (mode!=3&&(cpuCSRs[(int)CSRid::stap] & MASK_STAP_MODE)) {
+		ret = vaddr_to_paddr(addr, IOF_READ | (mode == MODE_USR ? IOF_USR : 0));
+		if ((ret & 0xffffffff) == 0) ret = MAKE_MEM_RW_RESULT_OK(memory._readp32(
+			GET_MEM_RW_RESULT_VAL(ret)));
+	}
+	else ret = MAKE_MEM_RW_RESULT_OK(memory._readp32(addr));
+	return ret;
 }
 
-unsigned int MemController::read16(unsigned int addr)
+unsigned long long MemController::read16(unsigned int addr, unsigned int mode)
 {
-	return memory._readp16(addr);
+	if ((addr & 1) != 0)return MEME_ADDR_NOT_ALIGNED;
+	unsigned long long ret;
+	if (mode != 3 && (cpuCSRs[(int)CSRid::stap] & MASK_STAP_MODE)) {
+		ret = vaddr_to_paddr(addr, IOF_READ | (mode == MODE_USR ? IOF_USR : 0));
+		if ((ret & 0xffffffff) == 0) ret = MAKE_MEM_RW_RESULT_OK(memory._readp16(
+			GET_MEM_RW_RESULT_VAL(ret)));
+	}
+	else ret = MAKE_MEM_RW_RESULT_OK(memory._readp16(addr));
+	return ret;
 }
 
-unsigned int MemController::read8(unsigned int addr)
+unsigned long long MemController::read8(unsigned int addr, unsigned int mode)
 {
-	return memory._readp8(addr);
+	unsigned long long ret;
+	if (mode != 3 && (cpuCSRs[(int)CSRid::stap] & MASK_STAP_MODE)) {
+		ret = vaddr_to_paddr(addr, IOF_READ | (mode == MODE_USR ? IOF_USR : 0));
+		if ((ret & 0xffffffff) == 0) ret = MAKE_MEM_RW_RESULT_OK(memory._readp8(
+			GET_MEM_RW_RESULT_VAL(ret)));
+	}
+	else ret = MAKE_MEM_RW_RESULT_OK(memory._readp8(addr));
+	return ret;
 }
 
-void MemController::write32(unsigned int addr, unsigned int val)
+unsigned int MemController::write32(unsigned int addr, unsigned int val, unsigned int mode)
 {
-	memory._writep32(addr, val);
+	if ((addr & 3) != 0)return MEME_ADDR_NOT_ALIGNED;
+	if (mode != 3 && (cpuCSRs[(int)CSRid::stap] & MASK_STAP_MODE)) {
+		unsigned long long ret;
+		ret = vaddr_to_paddr(addr, IOF_WRITE | (mode == MODE_USR ? IOF_USR : 0));
+		if ((ret & 0xffffffff) == 0) addr = GET_MEM_RW_RESULT_VAL(ret);
+		else return ret & 0xffffffff;
+	}
+	else memory._writep32(addr,val);
+	return MEME_OK;
 }
 
-void MemController::write16(unsigned int addr, unsigned short val)
+unsigned int MemController::write16(unsigned int addr, unsigned short val, unsigned int mode)
 {
-	memory._writep16(addr, val);
+	if ((addr & 1) != 0)return MEME_ADDR_NOT_ALIGNED;
+	if (mode != 3 && (cpuCSRs[(int)CSRid::stap] & MASK_STAP_MODE)) {
+		unsigned long long ret;
+		ret = vaddr_to_paddr(addr, IOF_WRITE | (mode == MODE_USR ? IOF_USR : 0));
+		if ((ret & 0xffffffff) == 0) addr = GET_MEM_RW_RESULT_VAL(ret);
+		else return ret & 0xffffffff;
+	}
+	else memory._readp16(addr);
+	return MEME_OK;
 }
 
-void MemController::write8(unsigned int addr, unsigned char val)
+unsigned int MemController::write8(unsigned int addr, unsigned char val, unsigned int mode)
 {
-	memory._writep8(addr, val);
+	if (mode != 3 && (cpuCSRs[(int)CSRid::stap] & MASK_STAP_MODE)) {
+		unsigned long long ret;
+		ret = vaddr_to_paddr(addr, IOF_WRITE | (mode == MODE_USR ? IOF_USR : 0));
+		if ((ret & 0xffffffff) == 0) addr = GET_MEM_RW_RESULT_VAL(ret);
+		else return ret & 0xffffffff;
+	}
+	else memory._readp8(addr);
+	return MEME_OK;
+}
+
+MemController::MemController(unsigned memsz)
+{
+	memory._init(memsz);
 }

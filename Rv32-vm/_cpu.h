@@ -1,6 +1,9 @@
 #ifndef mCPUH
 #define mCPUH
 #include "mem.h"
+#include<iostream>
+#include<string>
+
 #define RV32_
 #define MODE_USR 0
 #define MODE_SUPER 1
@@ -8,6 +11,22 @@
 #define MASK_STAP_MODE 0x80000000
 #define MASK_STAP_ASID 0x7fc00000
 #define MASK_STAP_PPN 0x3fffff
+#define EXEC_INS1_ABORT return
+
+#define EXC_INV_INSTRUCTION 2
+#define EXC_INSTRUCTION_ADDR_NOT_ALIGNED 0
+#define EXC_INSTRUCTION_ACCESS_FAULT 1
+#define EXC_BREAKPOINT 3
+#define EXC_LOAD_ADDR_NOT_ALIGNED 4
+#define EXC_LOAD_ACCESS_FAULT 5
+#define EXC_STORE_ADDR_NOT_ALIGNED 6
+#define EXC_STORE_ACCESS_FAULT 7
+#define EXC_ECALL_FROM_UMODE 8
+#define EXC_ECALL_FROM_SMODE 9
+#define EXC_ECALL_FROM_MMODE 11
+#define EXC_INSTRUCTION_PAGE_FAULT 12
+#define EXC_LOAD_PAGE_FAULT 13
+#define EXC_STORE_PAGE_FAULT 15
 
 //TODO
 #define CSR_HAVE_FLAG_SUM true
@@ -56,7 +75,7 @@ enum CSRid {
 	fcsr = 3, // URW
 
 	cycle = 0xc00, //URO
-	time = 0xc01, // URO
+	Time = 0xc01, // URO
 	instret = 0xc02, //URO
 	hpmcounter3 = 0xc03, //URO
 	hpmcounter4 = 0xc04, //URO
@@ -194,7 +213,6 @@ unsigned int immgen(Instruction ins);
 #define IOF_WRITE 1
 #define IOF_EXEC 2
 #define IOF_USR 4
-
  
 class Memioresult {
 public:
@@ -223,13 +241,15 @@ class MemController {
 	unsigned int* cpuCSRs;
 	myMem memory;
 public:
+	unsigned long long read_ins(unsigned int addr, unsigned int mode);
 	unsigned long long vaddr_to_paddr(unsigned int addr, int io_flag) ;//assume can access
-	unsigned int read32(unsigned int addr);
-	unsigned int read16(unsigned int addr);
-	unsigned int read8(unsigned int addr);
-	void write32(unsigned int addr, unsigned int val);
-	void write16(unsigned int addr, unsigned short val);
-	void write8(unsigned int addr, unsigned char val);
+	unsigned long long read32(unsigned int addr, unsigned int mode);
+	unsigned long long read16(unsigned int addr, unsigned int mode);
+	unsigned long long read8(unsigned int addr, unsigned int mode);
+	unsigned int write32(unsigned int addr, unsigned int val,unsigned int mode);
+	unsigned int write16(unsigned int addr, unsigned short val, unsigned int mode);
+	unsigned int write8(unsigned int addr, unsigned char val, unsigned int mode);
+	MemController(unsigned memsz);
 };
 
 class Cpu_
@@ -240,17 +260,45 @@ public:
 
 private:
 	REGS regs;
-	bool sig_abort_exec1;
-	unsigned int CSRs[4096];
-	struct
+	unsigned int Mode;
+	struct 
 	{
-		unsigned int MP : 2;
-		unsigned int reserved : 30;
-	}mflags;
+		unsigned int one_step : 1;
+		unsigned int pause : 1;
+		unsigned int wait : 1;
+		unsigned flag_run : 1;
+		unsigned flag_int : 1;
+		unsigned int reserved : 27;
+	}debugflags;
+	tagCSR::tagmcause exeption;
 	MemController memctrl;
+	unsigned int CSRs[4096];
+	void* thandle;
 	unsigned int ALUoperation(unsigned int a, unsigned int b, Instruction ins);
 	void ins_exec(Instruction ins);
-	void _into_trap(tagCSR::tagmcause cause, unsigned int mtval);
+	void _into_trap(tagCSR::tagmcause cause);
+	void _make_exception(int code, bool is_int=false);
+	void _make_mem_exception(unsigned int meme_code, unsigned io_code);
+	static unsigned long __stdcall cpurunthelper(void*);
+public:
+	void _init();//TODO
+	void runsync();
+	void runasync();
+	Cpu_(unsigned int mem_sz = 0x2000000);
+	friend class CPUdebugger;
+};
+
+class CPUdebugger {
+public:
+	enum runtimeMode{
+	sync, async};
+protected:
+	runtimeMode mode;
+	Cpu_* pcpu;
+public:
+	void printregs();
+	void commit_command(const std::string& comm);
+	void bind(Cpu_* pc);
 };
 
 #endif

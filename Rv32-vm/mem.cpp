@@ -7,7 +7,7 @@ void myMem::_init(unsigned int size)
 	while (x % 2 == 0) {
 		x /= 2;                     
 	}
-	if (x != 1)return;
+	if (x != 1)throw -1;
 	memsize = size;
 	_mask = 0xffffffff;
 	while (_mask > memsize)_mask >>= 1;
@@ -18,7 +18,7 @@ unsigned char myMem::_readp8(unsigned int _addr)
 {
 	unsigned char ret;
 	__try {
-		ret = *(membase + (_addr & _mask));
+		ret = *(unsigned char*)(membase + (_addr & _mask));
 	}
 	__except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION? 
 		EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
@@ -32,7 +32,7 @@ unsigned short myMem::_readp16(unsigned int _addr)
 {
 	unsigned short ret;
 	__try {
-		ret = *(membase + (_addr & _mask));
+		ret = *(unsigned short*)(membase + (_addr & _mask));
 	}
 	__except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION?
 		EXCEPTION_EXECUTE_HANDLER:EXCEPTION_CONTINUE_SEARCH) {
@@ -46,7 +46,7 @@ unsigned int myMem::_readp32(unsigned int _addr)
 {
 	unsigned int ret;
 	__try {
-		ret = *(membase + (_addr & _mask));
+		ret = *(unsigned int*)(membase + (_addr & _mask));
 	}
 	__except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION?
 		EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {

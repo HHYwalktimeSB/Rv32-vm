@@ -35,11 +35,10 @@ protected:
 	unsigned char* membase;
 	unsigned int memsize;
 	unsigned int _mask;
-	void _init(unsigned int size);
 	void* cbdata;//±£¡Ù
 	void (*_invoke_int)(void*, int);//±£¡Ù
 public:
-
+	void _init(unsigned int size);
 	unsigned char _readp8(unsigned int _addr);
 
 	unsigned short _readp16(unsigned int _addr);
