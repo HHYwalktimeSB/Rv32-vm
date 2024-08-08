@@ -48,7 +48,8 @@ public:
 	void _writep8(unsigned int _addr, unsigned char val);
 	void _writep16(unsigned int _addr, unsigned short val);
 	void _writep32(unsigned int _addr, unsigned int val);
-
+	inline unsigned char* native_ptr() { return membase; }
+	inline unsigned int size() { return memsize; }
 };
 
 //Ò³±íÏî

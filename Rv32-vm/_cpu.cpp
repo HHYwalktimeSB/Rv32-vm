@@ -1,4 +1,5 @@
 #include "_cpu.h"
+
 #define MASK_PPN_1 0xfff00000
 
 #define MAKE_MEM_RW_RESULT_OK(_VAL_) ((unsigned long long)(_VAL_))<<32
@@ -222,6 +223,7 @@ void Cpu_::ins_exec(Instruction ins)
 
 void Cpu_::_into_trap(tagCSR::tagmcause cause)
 {
+	debugflags.flag_int = 0;
 	*reinterpret_cast<tagCSR::tagmcause*>(&CSRs[(int)CSRid::mcause]) = cause;
 	CSRs[(int)CSRid::mepc] = regs.pc;
 	if (cause.Interrupt == 0 && 
@@ -302,8 +304,9 @@ void Cpu_::runsync()
 	}
 }
 
-Cpu_::Cpu_(unsigned int mem_sz):memctrl(mem_sz)
+Cpu_::Cpu_(unsigned int mem_sz):memctrl(mem_sz, this->CSRs)
 {
+	thandle = nullptr;
 }
 
 unsigned int immgen(Instruction ins)
@@ -437,11 +440,13 @@ unsigned long long MemController::read32(unsigned int addr, unsigned int mode)
 	unsigned long long ret;
 	if (mode!=3&&(cpuCSRs[(int)CSRid::stap] & MASK_STAP_MODE)) {
 		ret = vaddr_to_paddr(addr, IOF_READ | (mode == MODE_USR ? IOF_USR : 0));
-		if ((ret & 0xffffffff) == 0) ret = MAKE_MEM_RW_RESULT_OK(memory._readp32(
-			GET_MEM_RW_RESULT_VAL(ret)));
+		if ((ret & 0xffffffff) == 0) ret = (unsigned long long)memory._readp32(GET_MEM_RW_RESULT_VAL(ret));
+		else return ret;
 	}
-	else ret = MAKE_MEM_RW_RESULT_OK(memory._readp32(addr));
-	return ret;
+	else ret = (unsigned long long)memory._readp32(addr);
+	if (reinterpret_cast<tagCSR::tagmstatush*>(&cpuCSRs[(int)CSRid::mstatush])->MBE)
+		ret = (unsigned long long)bl_endian_switch32((unsigned int)ret);
+	return ret << 32;
 }
 
 unsigned long long MemController::read16(unsigned int addr, unsigned int mode)
@@ -450,11 +455,13 @@ unsigned long long MemController::read16(unsigned int addr, unsigned int mode)
 	unsigned long long ret;
 	if (mode != 3 && (cpuCSRs[(int)CSRid::stap] & MASK_STAP_MODE)) {
 		ret = vaddr_to_paddr(addr, IOF_READ | (mode == MODE_USR ? IOF_USR : 0));
-		if ((ret & 0xffffffff) == 0) ret = MAKE_MEM_RW_RESULT_OK(memory._readp16(
-			GET_MEM_RW_RESULT_VAL(ret)));
+		if ((ret & 0xffffffff) == 0) ret = (unsigned long long)memory._readp16(GET_MEM_RW_RESULT_VAL(ret));
+		else return ret;
 	}
-	else ret = MAKE_MEM_RW_RESULT_OK(memory._readp16(addr));
-	return ret;
+	else ret = (unsigned long long)memory._readp16(addr);
+	if (reinterpret_cast<tagCSR::tagmstatush*>(&cpuCSRs[(int)CSRid::mstatush])->MBE)
+		ret = (unsigned long long)bl_endian_switch16((unsigned short)ret);
+	return ret<<32;
 }
 
 unsigned long long MemController::read8(unsigned int addr, unsigned int mode)
@@ -471,6 +478,8 @@ unsigned long long MemController::read8(unsigned int addr, unsigned int mode)
 
 unsigned int MemController::write32(unsigned int addr, unsigned int val, unsigned int mode)
 {
+	if (reinterpret_cast<tagCSR::tagmstatush*>(&cpuCSRs[(int)CSRid::mstatush])->MBE)
+		val = bl_endian_switch32(val);
 	if ((addr & 3) != 0)return MEME_ADDR_NOT_ALIGNED;
 	if (mode != 3 && (cpuCSRs[(int)CSRid::stap] & MASK_STAP_MODE)) {
 		unsigned long long ret;
@@ -484,6 +493,8 @@ unsigned int MemController::write32(unsigned int addr, unsigned int val, unsigne
 
 unsigned int MemController::write16(unsigned int addr, unsigned short val, unsigned int mode)
 {
+	if (reinterpret_cast<tagCSR::tagmstatush*>(&cpuCSRs[(int)CSRid::mstatush])->MBE)
+		val = bl_endian_switch16(val);
 	if ((addr & 1) != 0)return MEME_ADDR_NOT_ALIGNED;
 	if (mode != 3 && (cpuCSRs[(int)CSRid::stap] & MASK_STAP_MODE)) {
 		unsigned long long ret;
@@ -507,7 +518,165 @@ unsigned int MemController::write8(unsigned int addr, unsigned char val, unsigne
 	return MEME_OK;
 }
 
-MemController::MemController(unsigned memsz)
+MemController::MemController(unsigned memsz, unsigned int* csr)
 {
 	memory._init(memsz);
+	cpuCSRs = csr;	
+}
+
+int CPUdebugger::run_1_cycle()
+{
+	auto rr = pcpu->memctrl.read_ins(pcpu->regs.pc, pcpu->Mode);
+	if ((rr & 0xffffffff) != 0) {
+		throw (rr & 0xffffffff);
+	}
+	Instruction ins;
+	*reinterpret_cast<unsigned int*>(&ins) = GET_MEM_RW_RESULT_VAL(rr);
+	pcpu->ins_exec(ins);
+	if ((pcpu->debugflags.flag_int)) {
+		pcpu->debugflags.flag_int = 0;
+		return pcpu->exeption.exception_code;
+	}
+	return EXC_NO_EXCEPTION;
+}
+
+void CPUdebugger::setpc(unsigned int val)
+{
+	pcpu->regs.pc = val;
+}
+
+void CPUdebugger::setreg(unsigned int id, int val)
+{
+	if (id == 0 || id >= 32)return;
+	pcpu->regs.x[id] = val;
+}
+
+const REGS* CPUdebugger::getregs()
+{
+	return &(pcpu->regs);
+}
+
+#include<Windows.h>
+#include<fstream>
+#include<stdio.h>
+
+void CPUdebugger::bind(Cpu_* pc)
+{
+	this->pcpu = pc;
+	mode = sync;
+}
+
+void CPUdebugger::quick_setup(unsigned int memsize)
+{
+	bind(new Cpu_(memsize));
+	pcpu->debugflags.one_step = true;
+}
+
+void CPUdebugger::memwrite(const char* src, unsigned int dst_paddr, unsigned element_sz, unsigned element_cnt, bool endian_switch)
+{
+	unsigned char* prev_excptionaddr = nullptr;
+	if (element_cnt * element_sz + dst_paddr > this->pcpu->memctrl.memory.size())return;
+	int i = 0;
+	unsigned char* membase = this->pcpu->memctrl.memory.native_ptr();
+	membase += dst_paddr;
+_func_start:
+	__try {
+		switch (element_sz)
+		{
+		case 1:
+			while (i < element_cnt) 
+				membase[i] = src[i],
+					++i;
+			break;
+		case 2:
+			while (i < element_cnt) {
+				reinterpret_cast<unsigned short*>(membase)[i] = endian_switch ?
+					bl_endian_switch16( reinterpret_cast<const unsigned short*>(src)[i]):
+					reinterpret_cast<const unsigned short*>(src)[i];
+					++i;
+			}
+			break;
+		case 4:
+			while (i < element_cnt) {
+				reinterpret_cast<unsigned int*>(membase)[i] = endian_switch ?
+					bl_endian_switch32(reinterpret_cast<const unsigned short*>(src)[i]) :
+					reinterpret_cast<const unsigned int*>(src)[i];
+				++i;
+			}
+			break;
+		default:
+			return;
+		}
+	}
+	__except ((GetExceptionCode()==EXCEPTION_ACCESS_VIOLATION&& prev_excptionaddr!=membase
+		)? EXCEPTION_EXECUTE_HANDLER:
+		EXCEPTION_CONTINUE_SEARCH) {
+		prev_excptionaddr = membase;
+		VirtualAlloc( reinterpret_cast<void*>(reinterpret_cast<unsigned long long>(
+			membase + i * element_sz )&0xFFFFFFFFFFFFF000), 
+			4096, MEM_COMMIT, PAGE_READWRITE);
+	}
+	if (i < element_cnt)goto _func_start;
+}
+
+void CPUdebugger::readmem(unsigned int src_paddr, char* dst, unsigned element_sz, unsigned element_cnt, bool endian_switch)
+{
+	unsigned char* prev_excptionaddr = nullptr;
+	if (element_cnt * element_sz + src_paddr > this->pcpu->memctrl.memory.size())return;
+	int i = 0;
+	unsigned char* membase = this->pcpu->memctrl.memory.native_ptr();
+	membase += src_paddr;
+_func_start:
+	__try {
+		switch (element_sz)
+		{
+		case 1:
+			while (i < element_cnt)
+				dst[i] = membase[i],
+				++i;
+			break;
+		case 2:
+			while (i < element_cnt) {
+				reinterpret_cast<unsigned short*>(dst)[i] = endian_switch ?
+					bl_endian_switch16(reinterpret_cast<const unsigned short*>(membase)[i]) :
+					reinterpret_cast<const unsigned short*>(membase)[i];
+				++i;
+			}
+			break;
+		case 4:
+			while (i < element_cnt) {
+				reinterpret_cast<unsigned int*>(dst)[i] = endian_switch ?
+					bl_endian_switch32(reinterpret_cast<const unsigned short*>(membase)[i]) :
+					reinterpret_cast<const unsigned int*>(membase)[i];
+				++i;
+			}
+			break;
+		default:
+			return;
+		}
+	}
+	__except ((GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION && 
+		prev_excptionaddr != membase) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+		prev_excptionaddr = membase;
+		VirtualAlloc(reinterpret_cast<void*>(reinterpret_cast<unsigned long long>(
+			membase + i * element_sz) & 0xFFFFFFFFFFFFF000),
+			4096, MEM_COMMIT, PAGE_READWRITE);
+	}
+	if (i < element_cnt)goto _func_start;
+}
+
+unsigned int CPUdebugger::loadmem_fromfile(const char* filename, unsigned int dst_paddr)
+{
+	unsigned sz_write = 0,sz_read=0;
+	char iobuf[4096];
+	FILE* fp;
+	fopen_s(&fp, filename, "rb");
+	if (!fp)return 0;
+	while (!feof(fp)) {
+		sz_read = fread(iobuf, 1, 4096, fp);
+		this->memwrite(iobuf, dst_paddr, 1, sz_read);
+		sz_write += sz_read;
+	}
+	fclose(fp);
+	return sz_write;
 }

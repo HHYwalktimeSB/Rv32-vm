@@ -13,6 +13,8 @@
 #define MASK_STAP_PPN 0x3fffff
 #define EXEC_INS1_ABORT return
 
+//以下为cpu异常代码
+
 #define EXC_INV_INSTRUCTION 2
 #define EXC_INSTRUCTION_ADDR_NOT_ALIGNED 0
 #define EXC_INSTRUCTION_ACCESS_FAULT 1
@@ -27,10 +29,11 @@
 #define EXC_INSTRUCTION_PAGE_FAULT 12
 #define EXC_LOAD_PAGE_FAULT 13
 #define EXC_STORE_PAGE_FAULT 15
+//无异常
+#define EXC_NO_EXCEPTION -1
 
 //TODO
 #define CSR_HAVE_FLAG_SUM true
-//TODO
 
 namespace tagCSR {
 	struct tagmtvec
@@ -65,9 +68,15 @@ namespace tagCSR {
 		unsigned int SIE : 1;
 		unsigned int UIE : 1;
 	};
+	struct tagmstatush {
+		unsigned int WPRI_1 : 4;
+		unsigned int SBE : 1;
+		unsigned int MBE : 1;
+		unsigned int WPRI : 26;
+	};
 }
 
-enum CSRid {
+enum class CSRid {
 	//user level
 
 	fflags = 1,//URW
@@ -75,7 +84,7 @@ enum CSRid {
 	fcsr = 3, // URW
 
 	cycle = 0xc00, //URO
-	Time = 0xc01, // URO
+	time = 0xc01, // URO
 	instret = 0xc02, //URO
 	hpmcounter3 = 0xc03, //URO
 	hpmcounter4 = 0xc04, //URO
@@ -238,9 +247,9 @@ public:
 };
 
 class MemController {
+public:
 	unsigned int* cpuCSRs;
 	myMem memory;
-public:
 	unsigned long long read_ins(unsigned int addr, unsigned int mode);
 	unsigned long long vaddr_to_paddr(unsigned int addr, int io_flag) ;//assume can access
 	unsigned long long read32(unsigned int addr, unsigned int mode);
@@ -249,7 +258,7 @@ public:
 	unsigned int write32(unsigned int addr, unsigned int val,unsigned int mode);
 	unsigned int write16(unsigned int addr, unsigned short val, unsigned int mode);
 	unsigned int write8(unsigned int addr, unsigned char val, unsigned int mode);
-	MemController(unsigned memsz);
+	MemController(unsigned memsz, unsigned int * csr);
 };
 
 class Cpu_
@@ -296,9 +305,33 @@ protected:
 	runtimeMode mode;
 	Cpu_* pcpu;
 public:
-	void printregs();
+
+	void printregs(unsigned int start, unsigned int end);
 	void commit_command(const std::string& comm);
+
 	void bind(Cpu_* pc);
+
+	void quick_setup(unsigned int memsize);
+
+	//单步执行，忽视中断和异常的处理，返回值：EXC_...等异常代码，在读指令出错时抛出异常
+	int run_1_cycle();
+
+	//暂时不做
+
+	void runsync();
+
+	void setpc(unsigned int val);
+	void setreg(unsigned int id, int val);
+	const REGS* getregs();
+
+	//写入内存, 源，目的地址，单个数据大小，写入数据计数，是否转换大小端(默认关闭)
+	void memwrite(const char* src, unsigned int dst_paddr,
+		unsigned element_sz, unsigned element_cnt, bool endian_switch = false);
+	void readmem(unsigned int src_paddr, char* dst, unsigned element_sz, unsigned element_cnt,
+		bool endian_switch = false);
+	//从文件中加载内存值（二进制文件）
+	unsigned int loadmem_fromfile(const char* filename, unsigned int dst_paddr);
+
 };
 
 #endif
