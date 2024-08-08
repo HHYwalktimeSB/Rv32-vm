@@ -2,16 +2,35 @@
 
 #include<stdio.h>
 #include<stdlib.h>
+#include<iostream>
+#include<string.h>
+
+using namespace std;
+
+char buf[8192];
 
 int main() {
-	Instruction ins{0};
-	ins.uType.opcode = OP_LUI;
-	ins.uType.rd = 5;
-	ins.uType.imm_31_12 = 114;
-	printf("%x\n", *reinterpret_cast<unsigned int*>(&ins));
-	Cpu_ _u;
-	_u._init();
-	_u.runsync();
+	CPUdebugger debug;
+	debug.quick_setup(1024 * 1024 * 4);//4m
+	bool continue_running = true;
+	int ecode;
+	while (continue_running) {
+		//add your code here
+		
+		//example of modify memory
+		strcpy_s(buf,"ahahhaa");
+		debug.memwrite(buf, 0 , 1,8);
+		
+
+		ecode = debug.run_1_cycle();
+
+		//example:
+		cout << debug.getregs()->x[1] << endl;
+
+
+		cin >> continue_running;
+	}
+
 	system("pause");
 	return 0;
 }	
