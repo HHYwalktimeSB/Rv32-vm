@@ -16,6 +16,9 @@ MY_API unsigned int make_1(const char* comm, int id_table_iptr);
 MY_API int make_file(const char* src, unsigned cf, const char* dst_bin, const char* dst_read,
 	FILE* out_log = stdout , const int id_table = -1);
 
+//never call it!
+void _init();
+
 //使用以下标志组合产生编译标志位
 
 #define OUT_BIN_EXEC 1

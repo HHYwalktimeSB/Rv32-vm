@@ -8,6 +8,9 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rv32masm_dll", "rv32masm_dll\rv32masm_dll.vcxproj", "{4C33367D-F004-43FA-BAEC-FBBCEA5147B5}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rv32casm", "rv32casm\rv32casm.vcxproj", "{DE4ED99E-0AA4-4D59-885C-498B8AD763A8}"
+	ProjectSection(ProjectDependencies) = postProject
+		{4C33367D-F004-43FA-BAEC-FBBCEA5147B5} = {4C33367D-F004-43FA-BAEC-FBBCEA5147B5}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

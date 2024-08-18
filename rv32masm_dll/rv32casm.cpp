@@ -2,11 +2,13 @@
 #include<string>
 #include<fstream>
 #include<map>
+#include<unordered_map>
 #include<iomanip>
 #include "rv32masm.h"
 
 using tag_table = std::map< std::string, unsigned int >;
 std::pair < tag_table, std::string > _internal_id_table[16];
+std::unordered_map < std::string, void (*)(Instruction&)> opcode_t;
 
 using namespace std;
 
@@ -31,6 +33,184 @@ void to_upper(string& str) {
     }
 }
 
+void op_make_lui(Instruction& ins) {
+    ins.uType.opcode |= OP_LUI;
+}
+
+void op_make_auipc(Instruction& ins) {
+    ins.uType.opcode |= OP_AUIPC;
+}
+
+void op_make_jal(Instruction& ins) {
+    ins.jType.opcode |= OP_JAL;
+}
+
+void op_make_jalr(Instruction& ins) {
+    ins.iType.opcode |= OP_JALR;
+}
+
+void op_make_beq(Instruction& ins) {
+    ins.bType.opcode |= OP_BTYPE;
+}
+
+void op_make_bne(Instruction& ins) {
+    ins.bType.opcode |= OP_BTYPE;
+    ins.bType.funct3 |= 0b001;
+}
+
+void op_make_blt(Instruction& ins) {
+    ins.bType.opcode |= OP_BTYPE;
+    ins.bType.funct3 |= 0b100;
+}
+
+void op_make_bge(Instruction& ins) {
+    ins.bType.opcode |= OP_BTYPE;
+    ins.bType.funct3 |= 0b101;
+}
+
+void op_make_bltu(Instruction& ins) {
+    ins.bType.opcode |= OP_BTYPE;
+    ins.bType.funct3 |= 0b110;
+}
+
+void op_make_bgeu(Instruction& ins) {
+    ins.bType.opcode |= OP_BTYPE;
+    ins.bType.funct3 |= 0b111;
+}
+
+void op_make_lb(Instruction& ins) {
+    ins.iType.opcode |= OP_LOAD;
+}
+
+void op_make_lh(Instruction& ins) {
+    ins.iType.opcode |= OP_LOAD;
+    ins.iType.funct3 |= 1;
+}
+
+void op_make_lw(Instruction& ins) {
+    ins.iType.opcode |= OP_LOAD;
+    ins.iType.funct3 |=2;
+}
+
+void op_make_lbu(Instruction& ins) {
+    ins.iType.opcode |= OP_LOAD;
+    ins.iType.funct3 |= 4;
+}
+
+void op_make_lhu(Instruction& ins) {
+    ins.iType.opcode |= OP_LOAD;
+    ins.iType.funct3 |= 5;
+}
+
+void op_make_sb(Instruction& ins) {
+    ins.sType.opcode |= OP_STORE;
+}
+
+void op_make_sh(Instruction& ins) {
+    ins.sType.opcode |= OP_STORE;
+    ins.sType.funct3 |= 1;
+}
+
+void op_make_sw(Instruction& ins) {
+    ins.sType.opcode |= OP_STORE;
+    ins.sType.funct3 |= 2;
+}
+
+void op_make_addi(Instruction& ins) {
+    ins.iType.opcode |= OP_ALU_IMM;
+}
+
+void op_make_slti(Instruction& ins) {
+    ins.iType.opcode |= OP_ALU_IMM;
+    ins.iType.funct3 |= 0b010;
+}
+
+void op_make_sltiu(Instruction& ins) {
+    ins.iType.opcode |= OP_ALU_IMM;
+    ins.iType.funct3 |= 0b011;
+}
+
+void op_make_xori(Instruction& ins) {
+    ins.iType.opcode |= OP_ALU_IMM;
+    ins.iType.funct3 |= 0b100;
+}
+
+void op_make_ori(Instruction& ins) {
+    ins.iType.opcode |= OP_ALU_IMM;
+    ins.iType.funct3 |= 0b110;
+}
+
+void op_make_andi(Instruction& ins) {
+    ins.iType.opcode |= OP_ALU_IMM  ;
+    ins.iType.funct3 |= 7;
+}
+
+void op_make_slli(Instruction& ins) {
+    ins.iType.opcode |= OP_ALU_IMM;
+    ins.iType.funct3 |= 0b001;
+}
+
+void op_make_srli(Instruction& ins) {
+    ins.iType.opcode |= OP_ALU_IMM;
+    ins.iType.funct3 |= 0b101u;
+}
+
+void op_make_srai(Instruction& ins) {
+    ins.iType.opcode |= OP_ALU_IMM;
+    ins.iType.funct3 |= 0b101;
+    ins.rType.funct7 |= 0b0100000;
+}
+
+void op_make_add(Instruction& ins) {
+    ins.rType.opcode |= OP_ALU;
+}
+
+void op_make_sub(Instruction& ins) {
+    ins.rType.opcode |= OP_ALU;
+    ins.rType.funct7 |= 0b0100000;
+}
+
+void op_make_sll(Instruction& ins) {
+    ins.rType.opcode |= OP_ALU;
+    ins.rType.funct3 |= 1;
+}
+
+void op_make_slt(Instruction& ins) {
+    ins.rType.opcode |= OP_ALU;
+    ins.rType.funct3 |= 2;
+}
+
+void op_make_sltu(Instruction& ins) {
+    ins.rType.opcode |= OP_ALU;
+    ins.rType.funct3 |= 3;
+}
+
+void op_make_xor(Instruction& ins) {
+    ins.rType.opcode |= OP_ALU;
+    ins.rType.funct3 |= 4;
+}
+
+void op_make_srl(Instruction& ins) {
+    ins.rType.opcode |= OP_ALU;
+    ins.rType.funct3 |= 5;
+}
+
+void op_make_sra(Instruction& ins) {
+    ins.rType.opcode |= OP_ALU;
+    ins.rType.funct3 |= 5;
+    ins.rType.funct7 |= 0b0100000;
+}
+
+void op_make_or(Instruction& ins) {
+    ins.rType.opcode |= OP_ALU;
+    ins.rType.funct3 |= 6;
+}
+
+void op_make_and(Instruction& ins) {
+    ins.rType.opcode |= OP_ALU;
+    ins.rType.funct3 |= 7;
+}
+
 bool cmppartstr_eq(const std::string& str, unsigned int index, unsigned int length, const char* b) {
     if (str.length() - index < length) return false;
     for (unsigned int i = 0; i < length; i++)
@@ -47,7 +227,7 @@ std::string get_para(const string& str, unsigned int& iptr) {
     while (iptr < str.length() && str[iptr] == ' ')++iptr;
     if (iptr >= str.length())throw str_no_para;
     string ret;
-    while (iptr < str.length() && str[iptr] != ' ' && str[iptr] != ',');
+    while (iptr < str.length() && str[iptr] != ' ' && str[iptr] != ',')
     {
         ret.push_back(str[iptr]);
         ++iptr;
@@ -93,153 +273,18 @@ void stype_imm(Instruction& ins, unsigned imm) {
     ins.sType.imm_11_5 = (imm & make_bits<12>()) >> 5;
 }
 
+//zero for inv instruction
 unsigned int make_1(const string& str, unsigned effective_line, tag_table& table) {
-    bool get_opcode = false;
     Instruction insret;
     *reinterpret_cast<unsigned int*>(&insret) = 0;
+    if (str.length() == 0)return 0;
+    unsigned int iptr = 0;
     try {
-        unsigned int iptr = 0;
         auto para = get_para(str, iptr);
-        if (para.length() < 2)throw inv_instruction;
-        switch (para[0])
-        {
-        case '#':
-            return 0;
-        case 'A':
-            if (cmppartstr_eq(para, 1, "DD")) {
-                if (para.length() == 3) insret.rType.opcode = OP_ALU;
-                else if (para[3] == 'I')insret.iType.opcode = OP_ALU_IMM;
-                insret.iType.funct3 = 0b000;
-            }
-            else if (cmppartstr_eq(para, 1, "ND")) {
-                if (para.length() == 3) insret.rType.opcode = OP_ALU;
-                else if (para[3] == 'I')insret.iType.opcode = OP_ALU_IMM;
-                insret.iType.funct3 = 0b111;
-            }
-            else if (cmppartstr_eq(para, 1, "UIPC")) 
-                insret.uType.opcode = OP_AUIPC;
-            break;
-        case 'B':
-            if (cmppartstr_eq(para, 1, "EQ")) {
-                insret.bType.opcode = OP_BTYPE;
-                insret.bType.funct3 = 0b000;
-            }
-            else if (cmppartstr_eq(para, 1, "NE")) {
-                insret.bType.opcode = OP_BTYPE;
-                insret.bType.funct3 = 0b001;
-            }
-            else if (cmppartstr_eq(para, 1, "LT")) {
-                if (para.length() == 3) insret.bType.opcode = OP_BTYPE, insret.bType.funct3 = 0b100;
-                else if (para[3] == 'U')insret.bType.opcode = OP_BTYPE, insret.bType.funct3 = 0b110;
-            }
-            else if (cmppartstr_eq(para, 1, "GE")) {
-                if (para.length() == 3) insret.bType.opcode = OP_BTYPE, insret.bType.funct3 = 0b101;
-                else if (para[3] == 'U')insret.bType.opcode = OP_BTYPE, insret.bType.funct3 = 0b111;
-            }
-            break;
-        case 'E':
-            if (cmppartstr_eq(para, 1, "CALL")) {
-                throw inv_instruction;
-            }
-            else if(cmppartstr_eq(para, 1, "BREAK")) {
-                throw inv_instruction;
-            }
-            break;
-        case 'J':
-            if (cmppartstr_eq(para, 1, "AL")) {
-                if (para.length() == 3)insret.jType.opcode = OP_JAL;
-                else if (para[3] == 'R') insret.iType.opcode = OP_JALR, insret.iType.funct3 = 0;
-            }
-            break;
-        case 'L':
-            if (cmppartstr_eq(para, 1, "UI")) {
-                insret.uType.opcode = OP_LUI;
-            }
-            else if (para.length() <= 3) {
-                switch (para[1])
-                {
-                case 'B':
-                    insret.iType.opcode = OP_LOAD;
-                    if (para.length() == 2)insret.iType.funct3 = 0;
-                    else insret.iType.funct3 = 0b100;
-                    break;
-                case 'H':
-                    insret.iType.opcode = OP_LOAD;
-                    if (para.length() == 2)insret.iType.funct3 = 1;
-                    else insret.iType.funct3 = 0b101;
-                    break;
-                case 'W':
-                    insret.iType.opcode = OP_LOAD;
-                    insret.iType.funct3 = 2;
-                    break;
-                }
-            }
-            break;
-        case 'O':
-            if (para.length()==3&& cmppartstr_eq(para, 1, "RI")) {
-                insret.iType.opcode = OP_ALU_IMM;
-                insret.iType.funct3 = 110;
-            }
-            else if (para.length() == 2 && para[1] == 'R') {
-                insret.iType.opcode = OP_ALU;
-                insret.iType.funct3 = 110;
-            }
-            break;
-        case 'S':
-            if (cmppartstr_eq(para, 1, "LL")) {
-                if (para.length() == 3) 
-                    insret.rType.opcode = OP_ALU,
-                    insret.rType.funct3 = 0b001;
-                else if (para[3] == 'I') 
-                    insret.rType.opcode = OP_ALU_IMM,
-                    insret.rType.funct3 = 0b001;
-            }
-            else if (cmppartstr_eq(para, 1, "RL")|| cmppartstr_eq(para, 1, "RA"))
-            {
-                if (para.length() == 3)
-                    insret.rType.opcode = OP_ALU,
-                    insret.rType.funct3 = 0b101;
-                else if(para[3] == 'I') 
-                    insret.rType.opcode = OP_ALU_IMM,
-                    insret.rType.funct3 = 0b101;
-            }
-            else if (cmppartstr_eq(para,1,"LT")) {
-                if (para.length() == 3)
-                    insret.rType.opcode = OP_ALU,
-                    insret.rType.funct3 = 0b010;
-                else if (para[3] == 'U')
-                    insret.rType.opcode = OP_ALU,
-                    insret.rType.funct3 = 0b011;
-            }
-            else if (cmppartstr_eq(para, 1, "UB")) {
-
-            }
-            else if (para.length() == 2) {
-                switch (para[1])
-                {
-                case 'B':
-                    insret.sType.opcode = OP_STORE;
-                    insret.sType.funct3 = 0;
-                    break;
-                case 'H':
-                    insret.sType.opcode = OP_STORE;
-                    insret.sType.funct3 = 1;
-                    break;
-                case 'W':
-                    insret.sType.opcode = OP_STORE;
-                    insret.sType.funct3 = 2;
-                    break;
-                }
-            }
-            break;
-        case 'X':
-            if (cmppartstr_eq(para, 1, "OR")) {
-                if (para.length() == 3) insret.rType.opcode = OP_ALU, insret.rType.funct3 = 0b100;
-                else insret.iType.opcode = OP_ALU_IMM, insret.rType.funct3 = 0b100;
-            }
-            break;
-        }
-        //switch_end
+        if (para.length() >= 1 && para[0] == '#')return 0;
+        auto it = opcode_t.find(para);
+        if (it != opcode_t.end())
+            it->second(insret);
         if (insret.rType.opcode == 0) {
             if (str.back() == ':') {
                 table.insert(make_pair(str.substr(0, str.length() - 1), effective_line*4));
@@ -256,10 +301,11 @@ unsigned int make_1(const string& str, unsigned effective_line, tag_table& table
             insret.rType.rd = make_reg(get_para(str, iptr));
             break;
         case OP_ALU_IMM:
+            if (insret.iType.funct3 == 0b101)insret.rType.funct7 |= 0b0100000;
         case OP_LOAD:
         case OP_JALR://ity
             insret.iType.rs1 = make_reg(get_para(str, iptr));
-            insret.iType.imm = get_imm(get_para(str, iptr), table) & make_bits<12>();
+            insret.iType.imm |= get_imm(get_para(str, iptr), table) & make_bits<12>();
             insret.iType.rd = make_reg(get_para(str, iptr));
             break;
         case OP_LUI:
@@ -285,11 +331,9 @@ unsigned int make_1(const string& str, unsigned effective_line, tag_table& table
     }
     catch (int e) {
         if (e == str_no_para) {
-            if (get_opcode)throw missing_para;
-            return 0;
+            throw missing_para;
         }
-        else
-            throw e;
+        else throw e;
     }
     return *reinterpret_cast<unsigned int*>(&insret);
 }
@@ -308,12 +352,20 @@ enum class ctrlflag {
 MY_API int fakemain(int argc, char** argv)
 {
     int cf = 0 ,i =0;
+    bool argv_alloct = false;
+    int rl = 0, el = 0; unsigned int ins;
+    char ibuf[8];
+    tag_table table;
+    std::string buf;
     if (argc == 0) {
         cout << "require input files\n";
         return 0;
     }
-    if (cmppartstr_eq(string(argv[0]), 0, "rv32csam") || cmppartstr_eq(string(argv[0]), 0, "csam"))i++;
-    fstream input, out_bin, out_num;
+    buf = argv[0];
+    if (buf.rfind("rv32casm") <buf.length() || buf.rfind("casm") < buf.length() )i++;
+    cout << argv[0] << endl;
+    ifstream input;
+    ofstream out_bin, out_num;
     ctrlflag acf = ctrlflag::set_input;
     string nbout, nnout;
     //get args
@@ -334,17 +386,17 @@ MY_API int fakemain(int argc, char** argv)
             switch (acf)
             {
             case ctrlflag::set_input:
-                input.open(argv[i], ios::in);
+                input.open(argv[i]);
                 cf |= INPUT_SET;
                 break;
             case ctrlflag::set_bout:
-                out_bin.open(argv[i], ios::out | ios::binary);
+                out_bin.open(argv[i], ios::binary);
                 cf |= OUTPUT_SET;
                 cf |= OUT_BIN_EXEC;
                 nbout = argv[i];
                 break;
             case ctrlflag::set_nout:
-                out_bin.open(argv[i], ios::out);
+                out_num.open(argv[i]);
                 cf |= OUTPUT_SET;
                 cf |= OUT_READBALE_FILE;
                 nnout = argv[i];
@@ -355,25 +407,30 @@ MY_API int fakemain(int argc, char** argv)
     }
     //check args & fsio
 
-    if (!((cf & INPUT_SET) && (cf & OUTPUT_SET)))
+    if (!(cf & INPUT_SET))
     {
-        cout << "fetal: input or output file missing\n";
-        return 0;
+        cout << "input file\n";
+        cin >> buf;
+        input.open(buf);
     }
-    if (!(input.is_open() && (cf & OUT_BIN_EXEC ? out_bin.is_open() : true) &&
-        (cf & OUT_READBALE_FILE ? out_num.is_open() : true))) {
-        cout << "fetal: failed to open some file(s)\n";
-        return 0;
-    }
-    //start
 
-    int rl = 0, el = 0; unsigned int ins;
-    char ibuf[8];
-    tag_table table;
-    std::string buf;
+    if (!(cf & OUTPUT_SET)) {
+        cout << "output file\n";
+        cin >> buf;
+        out_num.open(buf);
+        cf |= OUT_READBALE_FILE;
+    }
+
+    if (!(input.is_open() && (cf & OUT_BIN_EXEC ? out_bin.is_open() : true) && (cf & OUT_READBALE_FILE ?
+        out_num.is_open() : true)) ){
+        cout << "require input:\n";
+
+            return 0;
+    }
+    
+    //start
     try {
-        while (!input.eof()) {
-            getline(input, buf);
+        while (getline(input, buf)) {
             ins = make_1(buf, el, table);
             if (ins == 0) {
                 ++rl;
@@ -474,4 +531,46 @@ MY_API int make_file(const char* src, unsigned cf, const char* dst_bin, const ch
     if (cf & OUT_BIN_EXEC) out_bin.close();
     if (cf & OUT_READBALE_FILE) out_num.close();
     return 0;
+}
+
+#define ADD_INSTRUCTION(_STRNAME_, _FUNCT_ ) opcode_t.insert(make_pair(string(_STRNAME_), &_FUNCT_))
+
+void _init()
+{
+    opcode_t.insert(make_pair(string("LUI"), &op_make_lui));
+    ADD_INSTRUCTION("AUIPC", op_make_auipc);
+    ADD_INSTRUCTION("JAL", op_make_jal);
+    ADD_INSTRUCTION("JALR", op_make_jalr);
+    ADD_INSTRUCTION("BEQ", op_make_beq);
+    ADD_INSTRUCTION("BNE", op_make_bne);
+    ADD_INSTRUCTION("BLT", op_make_blt);
+    ADD_INSTRUCTION("BGE", op_make_bge);
+    ADD_INSTRUCTION("BLTU", op_make_bltu);
+    ADD_INSTRUCTION("LB", op_make_lb);
+    ADD_INSTRUCTION("LW", op_make_lw);
+    ADD_INSTRUCTION("LH", op_make_lh);
+    ADD_INSTRUCTION("LBU", op_make_lbu);
+    ADD_INSTRUCTION("LHU", op_make_lhu);
+    ADD_INSTRUCTION("SB", op_make_sb);
+    ADD_INSTRUCTION("SH", op_make_sh);
+    ADD_INSTRUCTION("SW", op_make_sw);
+    ADD_INSTRUCTION("ADDI", op_make_addi);
+    ADD_INSTRUCTION("SLTI", op_make_slti);
+    ADD_INSTRUCTION("SLTIU", op_make_sltiu);
+    ADD_INSTRUCTION("XORI", op_make_xori);
+    ADD_INSTRUCTION("ORI", op_make_ori);
+    ADD_INSTRUCTION("ANDI", op_make_andi);
+    ADD_INSTRUCTION("SLLI", op_make_slli);
+    ADD_INSTRUCTION("SRLI", op_make_srli);
+    ADD_INSTRUCTION("SRAI", op_make_srai);
+    ADD_INSTRUCTION("ADD", op_make_add);
+    ADD_INSTRUCTION("SUB", op_make_sub);
+    ADD_INSTRUCTION("SLL", op_make_sll);
+    ADD_INSTRUCTION("SLT", op_make_slt);
+    ADD_INSTRUCTION("SLTU", op_make_sltu);
+    ADD_INSTRUCTION("XOR", op_make_xor);
+    ADD_INSTRUCTION("SRL", op_make_srl);
+    ADD_INSTRUCTION("SRA", op_make_sra);
+    ADD_INSTRUCTION("OR", op_make_or);
+    ADD_INSTRUCTION("AND", op_make_and);
 }
