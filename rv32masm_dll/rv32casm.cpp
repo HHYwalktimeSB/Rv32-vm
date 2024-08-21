@@ -237,11 +237,11 @@ std::string get_para(const string& str, unsigned int& iptr) {
     return ret;
 }
 
-unsigned get_imm(const std::string& id, tag_table& table) {
+unsigned get_imm(const std::string& id, tag_table& table, int el) {
     if (id.length() == 0)throw inv_id;
     if ('0' <= id[0] && id[0] <= '9') return atoi(id.c_str());
     auto a = table.find(id);
-    if (a != table.end())return a->second;
+    if (a != table.end())return a->second - (el << 2);
     throw inv_id;
 }
 
@@ -287,7 +287,7 @@ unsigned int make_1(const string& str, unsigned effective_line, tag_table& table
             it->second(insret);
         if (insret.rType.opcode == 0) {
             if (str.back() == ':') {
-                table.insert(make_pair(str.substr(0, str.length() - 1), effective_line*4));
+                table.insert(make_pair(para.substr(0, str.length() - 1), effective_line*4));
                 return 0;
             }
             else throw inv_instruction;
@@ -305,26 +305,26 @@ unsigned int make_1(const string& str, unsigned effective_line, tag_table& table
         case OP_LOAD:
         case OP_JALR://ity
             insret.iType.rs1 = make_reg(get_para(str, iptr));
-            insret.iType.imm |= get_imm(get_para(str, iptr), table) & make_bits<12>();
+            insret.iType.imm |= get_imm(get_para(str, iptr), table, effective_line) & make_bits<12>();
             insret.iType.rd = make_reg(get_para(str, iptr));
             break;
         case OP_LUI:
         case OP_AUIPC://uty
-            insret.uType.imm_31_12 = get_imm(get_para(str, iptr), table) & make_bits<20>();
+            insret.uType.imm_31_12 = get_imm(get_para(str, iptr), table, effective_line) & make_bits<20>();
             insret.uType.rd = make_reg(get_para(str, iptr));
             break;
         case OP_JAL:
-            jtype_imm(insret, get_imm(get_para(str, iptr),table));
+            jtype_imm(insret, get_imm(get_para(str, iptr),table, effective_line));
             insret.jType.rd = make_reg(get_para(str, iptr));
             break;
         case OP_BTYPE:
             insret.bType.rs1 = make_reg(get_para(str, iptr));
             insret.bType.rs2 = make_reg(get_para(str, iptr));
-            btype_imm(insret, get_imm(get_para(str, iptr), table));
+            btype_imm(insret, get_imm(get_para(str, iptr), table, effective_line));
             break;
         case OP_STORE:
             insret. sType.rs1 = make_reg(get_para(str, iptr));
-            stype_imm(insret, get_imm(get_para(str, iptr), table));
+            stype_imm(insret, get_imm(get_para(str, iptr), table , effective_line));
             insret.sType.rs2 = make_reg(get_para(str, iptr));
             break;
         }

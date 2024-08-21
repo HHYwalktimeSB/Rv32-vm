@@ -212,6 +212,7 @@ void Cpu_::ins_exec(Instruction ins)
 			static_cast<int>(immgen(ins));
 		break;
 	case OP_SYSTEM:
+
 		break;
 	default://TODO
 		_make_exception(EXC_INV_INSTRUCTION);
@@ -224,6 +225,11 @@ void Cpu_::ins_exec(Instruction ins)
 void Cpu_::_into_trap(tagCSR::tagmcause cause)
 {
 	debugflags.flag_int = 0;
+	if (reinterpret_cast<tagCSR::tagmstatus*>(&CSRs[(int)CSRid::mstatus])->MIE == 0)return;
+	
+	//todo
+
+
 	*reinterpret_cast<tagCSR::tagmcause*>(&CSRs[(int)CSRid::mcause]) = cause;
 	CSRs[(int)CSRid::mepc] = regs.pc;
 	if (cause.Interrupt == 0 && 
@@ -233,6 +239,8 @@ void Cpu_::_into_trap(tagCSR::tagmcause cause)
 	mst->MPIE = mst->MIE;
 	mst->MIE = 0;
 	mst->MPP = Mode;
+	Mode = MODE_MACHINE;
+
 	if (reinterpret_cast<tagCSR::tagmtvec*>(&CSRs[(int)CSRid::mtvec])->mode == 1 
 		&& cause.Interrupt == 1)regs.pc = reinterpret_cast<tagCSR::tagmtvec*>(&CSRs[(int)CSRid::mtvec])->base +
 		cause.exception_code * 4;
