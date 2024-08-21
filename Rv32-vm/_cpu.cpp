@@ -556,6 +556,32 @@ const REGS* CPUdebugger::getregs()
 	return &(pcpu->regs);
 }
 
+void CPUdebugger::writecpustate(_cpustate* s)
+{
+	memcpy_s(s, sizeof(REGS), &(pcpu->regs), sizeof(REGS));
+}
+
+int CPUdebugger::cmpcpustate(const _cpustate* prevstate)
+{
+	int detect = 0;
+	for (int i = 0; i < 32; ++i) {
+		if (prevstate->regs.x[i] != pcpu->regs.x[i])
+		{
+			std::cout << "change in x" << i << ": " <<
+				prevstate->regs.x[i] << "->" << pcpu->regs.x[i]
+				<< std::endl;
+			detect++;
+		}
+	}
+	if (prevstate->regs.pc != pcpu->regs.pc) {
+		std::cout << "change in pc: " <<
+			prevstate->regs.pc << "->" << pcpu->regs.pc
+			<< std::endl;
+		detect++;
+	}
+	return detect;
+}
+
 #include<Windows.h>
 #include<fstream>
 #include<stdio.h>
@@ -680,4 +706,40 @@ unsigned int CPUdebugger::loadmem_fromfile(const char* filename, unsigned int ds
 	}
 	fclose(fp);
 	return sz_write;
+}
+
+unsigned int CPUdebugger::loadmem_fromhexfile(const char* filename, unsigned int dst_paddr, bool endian_switch)
+{
+	int i = 0;
+	unsigned int memleft = this->pcpu->memctrl.memory.size() - dst_paddr;
+	unsigned char* membase = this->pcpu->memctrl.memory.native_ptr();
+	unsigned char* prev_excptionaddr = nullptr;
+	FILE* fp;
+	char readbuf[64];
+	readbuf[0] = '0';
+	readbuf[1] = 'x';
+	fopen_s(&fp, filename, "r");
+	if (!fp)return 0;
+	long ptrprev = ftell(fp);
+_func_start:
+	__try {
+		while ( !feof(fp) && memleft > 0) {
+			fgets(readbuf + 2, 62, fp);
+			reinterpret_cast<unsigned int*>(membase)[i] =
+				endian_switch ? bl_endian_switch32(atof(readbuf)) : atof(readbuf);
+			++i; --memleft;
+			ptrprev = ftell(fp);
+		}
+	}
+	__except ((GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION &&
+		prev_excptionaddr != membase) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+	{
+		fseek(fp, ptrprev - ftell(fp), SEEK_CUR);
+		prev_excptionaddr = membase;
+		VirtualAlloc(reinterpret_cast<void*>(reinterpret_cast<unsigned long long>(
+			membase + i * 4) & 0xFFFFFFFFFFFFF000),
+			4096, MEM_COMMIT, PAGE_READWRITE);
+	}
+	if (memleft > 0 && !feof(fp)) goto _func_start;
+	return i * 4;
 }

@@ -14,18 +14,22 @@ int main() {
 	debug.quick_setup(1024 * 1024 * 4);//4m
 	bool continue_running = true;
 	int ecode;
+	_cpustate stat;
+
+	//add your codes bellow
+
+	//example of modify memory
+	debug.loadmem_fromhexfile("test.txt", 0);
+
 	while (continue_running) {
-		//add your code here
-		
-		//example of modify memory
-		strcpy_s(buf,"ahahhaa");
-		debug.memwrite(buf, 0 , 1,8);
-		
+
+		debug.writecpustate(&stat);
 
 		ecode = debug.run_1_cycle();
 
-		//example:
-		cout << debug.getregs()->x[1] << endl;
+		debug.cmpcpustate(&stat);
+
+		//cout << debug.getregs()->x[1] << endl;
 
 
 		cin >> continue_running;

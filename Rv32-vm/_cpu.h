@@ -297,6 +297,12 @@ public:
 	friend class CPUdebugger;
 };
 
+struct _cpustate {
+	REGS regs;
+	unsigned addinfo_1;
+	char* addinfo_2;
+};
+
 class CPUdebugger {
 public:
 	enum runtimeMode{
@@ -324,6 +330,11 @@ public:
 	void setreg(unsigned int id, int val);
 	const REGS* getregs();
 
+	void writecpustate(_cpustate* s);
+
+	// compare prev state & cur state 
+	int cmpcpustate(const _cpustate* prevstate);
+
 	//写入内存, 源，目的地址，单个数据大小，写入数据计数，是否转换大小端(默认关闭)
 	void memwrite(const char* src, unsigned int dst_paddr,
 		unsigned element_sz, unsigned element_cnt, bool endian_switch = false);
@@ -331,7 +342,7 @@ public:
 		bool endian_switch = false);
 	//从文件中加载内存值（二进制文件）
 	unsigned int loadmem_fromfile(const char* filename, unsigned int dst_paddr);
-
+	unsigned int loadmem_fromhexfile(const char* filename, unsigned int dst_paddr, bool endian_switch = false);
 };
 
 #endif
