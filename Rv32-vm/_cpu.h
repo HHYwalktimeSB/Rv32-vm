@@ -285,8 +285,8 @@ private:
 	void* thandle;
 	unsigned int ALUoperation(unsigned int a, unsigned int b, Instruction ins);
 	void ins_exec(Instruction ins);
-	void _into_trap(tagCSR::tagmcause cause);
-	void _make_exception(int code, bool is_int=false);
+	void _into_trap();
+	void _make_exception(int code,unsigned int mtval,  bool is_int=false);//set mepc = pc;
 	void _make_mem_exception(unsigned int meme_code, unsigned io_code);
 	static unsigned long __stdcall cpurunthelper(void*);
 public:
@@ -340,6 +340,9 @@ public:
 		unsigned element_sz, unsigned element_cnt, bool endian_switch = false);
 	void readmem(unsigned int src_paddr, char* dst, unsigned element_sz, unsigned element_cnt,
 		bool endian_switch = false);
+
+	unsigned int getCSR(CSRid id);
+	void writeCSR(CSRid id, unsigned int val);
 	//从文件中加载内存值（二进制文件）
 	unsigned int loadmem_fromfile(const char* filename, unsigned int dst_paddr);
 	unsigned int loadmem_fromhexfile(const char* filename, unsigned int dst_paddr, bool endian_switch = false);

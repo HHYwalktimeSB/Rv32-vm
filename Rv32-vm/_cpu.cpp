@@ -62,6 +62,10 @@ unsigned int Cpu_::ALUoperation(unsigned int a, unsigned int b, Instruction ins)
 
 void Cpu_::ins_exec(Instruction ins)
 {
+	if (regs.pc & 3) {
+		_make_exception(EXC_INSTRUCTION_ADDR_NOT_ALIGNED,*reinterpret_cast<unsigned int*>(&ins));
+		return;
+	}
 	switch (ins.rType.opcode)
 	{
 	case OP_ALU:
@@ -125,6 +129,9 @@ void Cpu_::ins_exec(Instruction ins)
 			}
 			if (ins.iType.rd != 0) regs.x[ins.iType.rd] = GET_MEM_RW_RESULT_VAL(_ret_buf);
 			break;
+		default:
+			this->_make_exception(EXC_INV_INSTRUCTION, *reinterpret_cast<unsigned int*>(&ins));
+			return;
 		}
 	}
 	break;
@@ -158,6 +165,9 @@ void Cpu_::ins_exec(Instruction ins)
 				EXEC_INS1_ABORT;
 			}
 			break;
+		default:
+			_make_exception(EXC_INV_INSTRUCTION, *reinterpret_cast<unsigned int*>(&ins));
+			return;
 		}
 	}
 	break;
@@ -184,6 +194,9 @@ void Cpu_::ins_exec(Instruction ins)
 		case 7:
 			if_jmp = regs.x[ins.bType.rs1] >= regs.x[ins.bType.rs2];
 			break;
+		default:
+			_make_exception(EXC_INV_INSTRUCTION, *reinterpret_cast<unsigned int*>(&ins));
+			return;
 		}
 		if (if_jmp) {
 			regs.pc += static_cast<int>(immgen(ins));
@@ -215,43 +228,35 @@ void Cpu_::ins_exec(Instruction ins)
 
 		break;
 	default://TODO
-		_make_exception(EXC_INV_INSTRUCTION);
+		_make_exception(EXC_INV_INSTRUCTION, *reinterpret_cast<unsigned int*>(&ins));
 		EXEC_INS1_ABORT;
 		break;
 	}
 	regs.pc += 4;
 }
 
-void Cpu_::_into_trap(tagCSR::tagmcause cause)
+void Cpu_::_into_trap()
 {
 	debugflags.flag_int = 0;
-	if (reinterpret_cast<tagCSR::tagmstatus*>(&CSRs[(int)CSRid::mstatus])->MIE == 0)return;
-	
-	//todo
 
-
-	*reinterpret_cast<tagCSR::tagmcause*>(&CSRs[(int)CSRid::mcause]) = cause;
-	CSRs[(int)CSRid::mepc] = regs.pc;
-	if (cause.Interrupt == 0 && 
-		(cause.exception_code == 8 || cause.exception_code == 9 || cause.exception_code == 11))
-		CSRs[(int)CSRid::mepc] += 4;
 	auto mst = reinterpret_cast<tagCSR::tagmstatus*>(&CSRs[(int)CSRid::mstatus]);
 	mst->MPIE = mst->MIE;
 	mst->MIE = 0;
 	mst->MPP = Mode;
 	Mode = MODE_MACHINE;
 
-	if (reinterpret_cast<tagCSR::tagmtvec*>(&CSRs[(int)CSRid::mtvec])->mode == 1 
-		&& cause.Interrupt == 1)regs.pc = reinterpret_cast<tagCSR::tagmtvec*>(&CSRs[(int)CSRid::mtvec])->base +
-		cause.exception_code * 4;
+	if (reinterpret_cast<tagCSR::tagmtvec*>(&CSRs[(int)CSRid::mtvec])->mode == 1)
+		regs.pc = reinterpret_cast<tagCSR::tagmtvec*>(&CSRs[(int)CSRid::mtvec])->base +
+		reinterpret_cast<tagCSR::tagmcause*>(&CSRs[(int)CSRid::mcause])->exception_code * 4;
 	else regs.pc = reinterpret_cast<tagCSR::tagmtvec*>(&CSRs[(int)CSRid::mtvec])->base;
 }
 
-void Cpu_::_make_exception(int code, bool is_int)
+void Cpu_::_make_exception(int code, unsigned int mtval, bool is_int)
 {
 	this->exeption.exception_code = code;
 	this->exeption.Interrupt = is_int;
 	this->debugflags.flag_int = 1;
+	CSRs[(int)CSRid::mtval] = mtval;
 }
 
 void Cpu_::_make_mem_exception(unsigned int meme_code, unsigned io_code)
@@ -259,16 +264,16 @@ void Cpu_::_make_mem_exception(unsigned int meme_code, unsigned io_code)
 	switch (meme_code)
 	{
 	case MEME_ADDR_NOT_ALIGNED:
-		if (io_code == IOF_READ)_make_exception(EXC_LOAD_ADDR_NOT_ALIGNED);
-		else _make_exception(EXC_STORE_ADDR_NOT_ALIGNED);
+		if (io_code == IOF_READ)_make_exception(EXC_LOAD_ADDR_NOT_ALIGNED,0);
+		else _make_exception(EXC_STORE_ADDR_NOT_ALIGNED,0);
 		break;
 	case MEME_ACCESS_DENIED:
-		if (io_code == IOF_READ) _make_exception(EXC_LOAD_ACCESS_FAULT);
-		else _make_exception(EXC_STORE_ACCESS_FAULT);
+		if (io_code == IOF_READ) _make_exception(EXC_LOAD_ACCESS_FAULT,0);
+		else _make_exception(EXC_STORE_ACCESS_FAULT,0);
 		break;
 	case MEME_PAGE_FAULT:
-		if (io_code == IOF_READ)_make_exception(EXC_LOAD_PAGE_FAULT);
-		else _make_exception(EXC_STORE_PAGE_FAULT);
+		if (io_code == IOF_READ)_make_exception(EXC_LOAD_PAGE_FAULT,0);
+		else _make_exception(EXC_STORE_PAGE_FAULT,0);
 		break;
 	default:
 		break;
@@ -289,20 +294,20 @@ void Cpu_::runsync()
 			this->ins_exec(ins);
 				break;
 		case	MEME_ACCESS_DENIED:
-			_make_exception(EXC_INSTRUCTION_ACCESS_FAULT);
+			_make_exception(EXC_INSTRUCTION_ACCESS_FAULT, regs.pc);
 			break;
 		case	MEME_ADDR_NOT_ALIGNED:
-			_make_exception(EXC_INSTRUCTION_ADDR_NOT_ALIGNED);
+			_make_exception(EXC_INSTRUCTION_ADDR_NOT_ALIGNED , regs.pc);
 			break;
 		case MEME_PAGE_FAULT:
-			_make_exception(EXC_INSTRUCTION_PAGE_FAULT);
+			_make_exception(EXC_INSTRUCTION_PAGE_FAULT, regs.pc);
 			break;
 		default:
 			break;
 		}
 		if (debugflags.flag_int) {
 			debugflags.flag_int = 0;
-			_into_trap(exeption);
+			_into_trap();
 		}
 		if (debugflags.one_step) {
 			std::string str;
@@ -575,16 +580,12 @@ int CPUdebugger::cmpcpustate(const _cpustate* prevstate)
 	for (int i = 0; i < 32; ++i) {
 		if (prevstate->regs.x[i] != pcpu->regs.x[i])
 		{
-			std::cout << "change in x" << i << ": " <<
-				prevstate->regs.x[i] << "->" << pcpu->regs.x[i]
-				<< std::endl;
+			printf("change in x%d: %u->%u\n", i, prevstate->regs.x[i],pcpu->regs.x[i]);
 			detect++;
 		}
 	}
 	if (prevstate->regs.pc != pcpu->regs.pc) {
-		std::cout << "change in pc: " <<
-			prevstate->regs.pc << "->" << pcpu->regs.pc
-			<< std::endl;
+		printf("change in pc: %x->%x\n", prevstate->regs.pc, pcpu->regs.pc);
 		detect++;
 	}
 	return detect;
@@ -698,6 +699,16 @@ _func_start:
 			4096, MEM_COMMIT, PAGE_READWRITE);
 	}
 	if (i < element_cnt)goto _func_start;
+}
+
+unsigned int CPUdebugger::getCSR(CSRid id)
+{
+	return pcpu->CSRs[(int)id];
+}
+
+void CPUdebugger::writeCSR(CSRid id, unsigned int val)
+{
+	pcpu->CSRs[(int)id] = val;
 }
 
 unsigned int CPUdebugger::loadmem_fromfile(const char* filename, unsigned int dst_paddr)
