@@ -264,20 +264,21 @@ public:
 class Cpu_
 {
 public:
-	void Invoke_err();//reserved
 	void Invoke_int();//reserved
 
 private:
 	REGS regs;
 	unsigned int Mode;
-	struct 
+	struct mycpuwalktimeflags
 	{
 		unsigned int one_step : 1;
 		unsigned int pause : 1;
 		unsigned int wait : 1;
-		unsigned flag_run : 1;
-		unsigned flag_int : 1;
-		unsigned int reserved : 27;
+		unsigned int flag_run : 1;
+		unsigned int flag_int : 1;
+		unsigned int eflag : 1;
+		unsigned int flag_async : 1;
+		unsigned int reserved : 25;
 	}debugflags;
 	tagCSR::tagmcause exeption;
 	MemController memctrl;
@@ -285,10 +286,12 @@ private:
 	void* thandle;
 	unsigned int ALUoperation(unsigned int a, unsigned int b, Instruction ins);
 	void ins_exec(Instruction ins);
-	void _into_trap(tagCSR::tagmcause cause);
-	void _make_exception(int code, bool is_int=false);
+	void _into_trap();
+	void _into_int();//TODO
+	void _make_exception(int code,unsigned int mtval);//set mepc = pc;
 	void _make_mem_exception(unsigned int meme_code, unsigned io_code);
 	static unsigned long __stdcall cpurunthelper(void*);
+	void _wait_for_signal_run();//TODO
 public:
 	void _init();//TODO
 	void runsync();
@@ -340,6 +343,9 @@ public:
 		unsigned element_sz, unsigned element_cnt, bool endian_switch = false);
 	void readmem(unsigned int src_paddr, char* dst, unsigned element_sz, unsigned element_cnt,
 		bool endian_switch = false);
+
+	unsigned int getCSR(CSRid id);
+	void writeCSR(CSRid id, unsigned int val);
 	//从文件中加载内存值（二进制文件）
 	unsigned int loadmem_fromfile(const char* filename, unsigned int dst_paddr);
 	unsigned int loadmem_fromhexfile(const char* filename, unsigned int dst_paddr, bool endian_switch = false);
