@@ -141,7 +141,7 @@ enum class CSRid {
 struct REGS
 {
 	unsigned int x[32];
-	int pc;
+	unsigned int pc;
 };
 
 template <unsigned N>
@@ -248,6 +248,16 @@ public:
 
 class MemController {
 public:
+	const static unsigned int mioflag_read = 16;
+	const static unsigned int mioflag_write = 32;
+	const static unsigned int mioflag_mask = 17;
+private:
+	unsigned long long shared_io_interfence(unsigned int addr, unsigned int ioinfo, ... );
+	unsigned char* membase;
+	unsigned int mem_mask;
+public:
+	typedef int (* dev_writeift) (unsigned , unsigned,unsigned);
+	typedef int (*dev_readift) (unsigned, unsigned*);
 	unsigned int* cpuCSRs;
 	myMem memory;
 	unsigned long long read_ins(unsigned int addr, unsigned int mode);
@@ -259,7 +269,15 @@ public:
 	unsigned int write16(unsigned int addr, unsigned short val, unsigned int mode);
 	unsigned int write8(unsigned int addr, unsigned char val, unsigned int mode);
 	MemController(unsigned memsz, unsigned int * csr);
+	inline unsigned long long vaddr_to_paddr_read_unsafe(unsigned int addr, unsigned int mode);
+	inline unsigned long long vaddr_to_paddr_exec_unsafe(unsigned int addr, unsigned int mode);
+	inline unsigned long long vaddr_to_paddr_write_unsafe(unsigned int addr, unsigned int mode);
+	unsigned long long read_unsafe(unsigned int addr, unsigned int mode_and_iosz);
+	unsigned int write_unsafe(unsigned int addr, unsigned int val, unsigned int mode_and_iosz);
+	unsigned long long read_ins_unsafe(unsigned int addr, unsigned int Mode);
 };
+
+class CPUdebugger;
 
 class Cpu_
 {
@@ -267,6 +285,8 @@ public:
 	void Invoke_int();//reserved
 
 private:
+	int _ins_exec_op_alu(Instruction ins);
+	static decltype(&Cpu_::_ins_exec_op_alu) _decodeheperfuncs[128];
 	REGS regs;
 	unsigned int Mode;
 	struct mycpuwalktimeflags
@@ -279,19 +299,35 @@ private:
 		unsigned int eflag : 1;
 		unsigned int flag_async : 1;
 		unsigned int reserved : 25;
-	}debugflags;
+	};
+	mycpuwalktimeflags debugflags;
 	tagCSR::tagmcause exeption;
 	MemController memctrl;
 	unsigned int CSRs[4096];
 	void* thandle;
-	unsigned int ALUoperation(unsigned int a, unsigned int b, Instruction ins);
+	bool _csr_readable(int csrid);
+	bool _csr_writeable(int csrid);
+	static unsigned int ALUoperation(unsigned int a, unsigned int b, Instruction ins);
 	void ins_exec(Instruction ins);
 	void _into_trap();
 	void _into_int();//TODO
 	void _make_exception(int code,unsigned int mtval);//set mepc = pc;
+	void _make_exception(int code);
 	void _make_mem_exception(unsigned int meme_code, unsigned io_code);
 	static unsigned long __stdcall cpurunthelper(void*);
 	void _wait_for_signal_run();//TODO
+	int _ins_exec_op_aluimm(Instruction ins);
+	int _ins_exec_op_load(Instruction ins);
+	int _ins_exec_op_store(Instruction ins);
+	int _ins_exec_op_system(Instruction ins);
+	int _ins_exec_op_bty(Instruction ins);
+	int _ins_exec_op_jal(Instruction ins);
+	int _ins_exec_op_jalr(Instruction ins);
+	int _ins_exec_op_lui(Instruction ins);
+	int _ins_exec_op_auipc(Instruction ins);
+	int _ins_exec_op_unknown(Instruction ins);
+	static void _init_ftable();
+	void ins_exec_d(CPUdebugger*);
 public:
 	void _init();//TODO
 	void runsync();
@@ -319,6 +355,8 @@ public:
 	void commit_command(const std::string& comm);
 
 	void bind(Cpu_* pc);
+
+	void simple_run();
 
 	void quick_setup(unsigned int memsize);
 

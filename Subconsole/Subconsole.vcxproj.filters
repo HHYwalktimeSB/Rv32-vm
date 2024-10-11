@@ -15,31 +15,13 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="mem.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="_cpu.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="test.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="simdops.cpp">
+    <ClCompile Include="Subconsole.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="mem.h">
+    <ClInclude Include="subcondefs.h">
       <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="_cpu.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="simdops.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="mioforc.h">
-      <Filter>源文件</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

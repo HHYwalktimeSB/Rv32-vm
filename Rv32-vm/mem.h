@@ -50,6 +50,7 @@ public:
 	void _writep32(unsigned int _addr, unsigned int val);
 	inline unsigned char* native_ptr() { return membase; }
 	inline unsigned int size() { return memsize; }
+	inline unsigned int mask() { return _mask;  }
 };
 
 //Ò³±íÏî

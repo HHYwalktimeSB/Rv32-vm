@@ -12,6 +12,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rv32casm", "rv32casm\rv32ca
 		{4C33367D-F004-43FA-BAEC-FBBCEA5147B5} = {4C33367D-F004-43FA-BAEC-FBBCEA5147B5}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Subconsole", "Subconsole\Subconsole.vcxproj", "{FA55989B-4499-4482-B7B6-47527F9E89DD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -44,6 +46,14 @@ Global
 		{DE4ED99E-0AA4-4D59-885C-498B8AD763A8}.Release|x64.Build.0 = Release|x64
 		{DE4ED99E-0AA4-4D59-885C-498B8AD763A8}.Release|x86.ActiveCfg = Release|Win32
 		{DE4ED99E-0AA4-4D59-885C-498B8AD763A8}.Release|x86.Build.0 = Release|Win32
+		{FA55989B-4499-4482-B7B6-47527F9E89DD}.Debug|x64.ActiveCfg = Debug|x64
+		{FA55989B-4499-4482-B7B6-47527F9E89DD}.Debug|x64.Build.0 = Debug|x64
+		{FA55989B-4499-4482-B7B6-47527F9E89DD}.Debug|x86.ActiveCfg = Debug|Win32
+		{FA55989B-4499-4482-B7B6-47527F9E89DD}.Debug|x86.Build.0 = Debug|Win32
+		{FA55989B-4499-4482-B7B6-47527F9E89DD}.Release|x64.ActiveCfg = Release|x64
+		{FA55989B-4499-4482-B7B6-47527F9E89DD}.Release|x64.Build.0 = Release|x64
+		{FA55989B-4499-4482-B7B6-47527F9E89DD}.Release|x86.ActiveCfg = Release|Win32
+		{FA55989B-4499-4482-B7B6-47527F9E89DD}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

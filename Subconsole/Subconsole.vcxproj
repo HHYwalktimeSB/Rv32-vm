@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{ba2da042-e854-4e75-9795-91d189be2a1c}</ProjectGuid>
-    <RootNamespace>Rv32vm</RootNamespace>
+    <ProjectGuid>{fa55989b-4499-4482-b7b6-47527f9e89dd}</ProjectGuid>
+    <RootNamespace>Subconsole</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -127,16 +127,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="mem.cpp" />
-    <ClCompile Include="simdops.cpp" />
-    <ClCompile Include="test.cpp" />
-    <ClCompile Include="_cpu.cpp" />
+    <ClCompile Include="Subconsole.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="mem.h" />
-    <ClInclude Include="mioforc.h" />
-    <ClInclude Include="simdops.h" />
-    <ClInclude Include="_cpu.h" />
+    <ClInclude Include="subcondefs.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
