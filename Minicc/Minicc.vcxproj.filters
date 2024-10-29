@@ -15,36 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="framework.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="pch.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="tks.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="s_table.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="parsing.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="dllmain.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="pch.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="tks.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="s_table.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="parsing.cpp">
+    <ClCompile Include="Minicc.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
