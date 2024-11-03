@@ -18,6 +18,13 @@ struct _var_attribute
 	unsigned int ptr_cnt : 28;
 };
 
+struct _vty_description {
+	unsigned is_const : 1;
+	unsigned  is_struct : 1;
+	unsigned  ptr_cnt : 4;
+	unsigned _typeid : 26;
+};
+
 class s_attribute
 {
 public:

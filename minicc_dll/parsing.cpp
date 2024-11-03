@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "parsing.h"
 
+using namespace std;
+
 bool is_token_a_typename(Token* tk, Stable& table){
 	return (tk->type == TK_TYPE_KEYWORD && (tk->val == KW_TYPENAME_CHAR || tk->val == KW_TYPENAME_INT
 		|| tk->val == KW_TYPENAME_SHORT));
@@ -133,7 +135,7 @@ Token* parse_var_single(Stable& table, s_attribute* x, Token* tk, std::string& n
 		}
 		tk = tk->next;
 	}
-	if (tk->str.str[0] == '[') {
+	if (tk!=nullptr&& tk->str.str[0] == '[') {
 		x->attr.is_array = 1;
 		tk = tk->next;
 		if (tk->type == TK_TYPE_NUMBER) {
@@ -340,7 +342,7 @@ Token* parse_brace_(Stable& table, Token* tk, Machine_state& ms, parsing_o_s& ou
 				auto start_pc = out.GetPC();
 				auto modix = out.getbufref().length() + 12;
 				Token* brace_ptr = nullptr;
-				out.add_instruction("bne a0, x0,                               ");
+				out.add_instruction("bne a0, x0,                                   ");
 				if (tk->str.str[0] == '{') {
 					rvcccall_fast(ms, out);
 					out.add_instruction(std::string("jal ra, @_br_") + name + std::to_string(out.get_new_id()));
@@ -373,7 +375,7 @@ Token* parse_brace_(Stable& table, Token* tk, Machine_state& ms, parsing_o_s& ou
 				else tk = parse_statment(table, tk, ms, out);
 				auto endpc = out.GetPC();
 				start_pc = endpc - start_pc;
-				_itoa(start_pc, const_cast<char*>(out.getbufref().data()) + modix, 10);
+				_itoa_s(start_pc, const_cast<char*>(out.getbufref().data()) + modix,32,  10);
 				if(brace_ptr) tk = parse_brace_(table, brace_ptr, ms, out, name, loop_ctrl, cnt_rec_depth + 1);
 				break;
 			}
@@ -482,6 +484,55 @@ else {
 	return tk ? tk->next : nullptr;
 }
 
+class _NodeUnionTy {
+public:
+	Token* tkref;
+	struct 
+	{
+		unsigned is_lval : 1;
+		unsigned reserved : 31;
+	}attr;
+
+};
+
+Token* parse_statment(Stable& table, Token* tk, Machine_state& ms, parsing_o_s& out)
+{
+	//sepcial case
+	if (tk->next!=nullptr && tk->next->str.str[0] == ':') {
+		out.add_instruction(std::string("@-cvar ") + tk->str.str + " -part vaddr:" + std::to_string(out.GetPC()) +
+		"-part sp:" + std::to_string(ms.sp_offset) );
+		return tk->next->next;
+	}
+	//normal case
+	stack<_exprNode> data;
+	stack<Token*> op;
+	int left_brace_cnt = 0;
+	_exprNode tmp;
+	while (tk) {
+		if (tk->str.str[0] == ';' || tk->str.str[0] == ',')break;
+		if (tk->str.str[0] == ')' || left_brace_cnt == 0)break;
+		if (tk->str.str[0] == '(' && tk->next->type == TK_TYPE_KEYWORD) {
+			tk = tk->next;
+			//cast 
+			while (tk) {
+
+			}
+		}
+		if (tk->type == TK_TYPE_ID || tk->type == TK_TYPE_NUMBER) {
+			//nodes.push(tk);
+		}
+		else {
+			op.push(tk);
+		}
+	}
+}
+
+Token* parse_var_global(Stable& table, Token* tk, parsing_o_s& out)
+{
+	throw "error global var todo!";
+	return nullptr;
+}
+
 void rvcccall(Machine_state& ms, parsing_o_s& o) {
 	//push ra, push a1-a7 
 	ms.sp_offset -= 64;
@@ -507,6 +558,11 @@ void rvccret_fast(Machine_state& ms, parsing_o_s& o)
 	o.add_instruction("$lw sp[4], a7");
 	o.add_instruction("$addi sp, 8, sp");
 	ms.sp_offset -= 8;
+}
+
+void _op_assignlval(s_attribute*, parsing_o_s& o, const std::string& rval)
+{
+	throw "err op_assign_val todo!";
 }
 
 int parsing_o_s::get_new_id()

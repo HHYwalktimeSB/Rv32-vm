@@ -334,7 +334,7 @@ static inline void FSM_transform_state(unsigned & state, unsigned &flag, unsigne
                 strbuf.push_back(c);
                 cur = append_next_tk(cur, strbuf.c_str(), strbuf.length(), TK_TYPE_OP);
                 cur->val = TKV_OP_DEC;
-                strbuf.clear();
+                strbuf.clear(); 
                 break;
             }
             if (c == '|' && strbuf[0] == '|') {
@@ -350,6 +350,30 @@ static inline void FSM_transform_state(unsigned & state, unsigned &flag, unsigne
                 strbuf.push_back(c);
                 cur = append_next_tk(cur, strbuf.c_str(), strbuf.length(), TK_TYPE_OP);
                 cur->val = TKV_OP_AND;
+                strbuf.clear();
+                break;
+            }
+            if (c == '>' && strbuf[0] == '-') {
+                state = state_transform_to = STATE_INIT;
+                strbuf.push_back(c);
+                cur = append_next_tk(cur, strbuf.c_str(), strbuf.length(), TK_TYPE_OP);
+                cur->val = TKV_OP_PTRACCEES;
+                strbuf.clear();
+                break;
+            }
+            if (c == '>' && strbuf[0] == '>') {
+                state = state_transform_to = STATE_INIT;
+                strbuf.push_back(c);
+                cur = append_next_tk(cur, strbuf.c_str(), strbuf.length(), TK_TYPE_OP);
+                cur->val = TKV_OP_RS;
+                strbuf.clear();
+                break;
+            }
+            if (c == '<' && strbuf[0] == '<') {
+                state = state_transform_to = STATE_INIT;
+                strbuf.push_back(c);
+                cur = append_next_tk(cur, strbuf.c_str(), strbuf.length(), TK_TYPE_OP);
+                cur->val = TKV_OP_LS;
                 strbuf.clear();
                 break;
             }

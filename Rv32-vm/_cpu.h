@@ -3,6 +3,8 @@
 #include "mem.h"
 #include<iostream>
 #include<string>
+#include"../jittools/jittool.h"
+
 
 #define RV32_
 #define MODE_USR 0
@@ -141,7 +143,8 @@ enum class CSRid {
 struct REGS
 {
 	unsigned int x[32];
-	unsigned int pc;
+	unsigned int pc;//_128
+	int instruction_ecode;
 };
 
 template <unsigned N>
@@ -212,7 +215,43 @@ union Instruction
 #define OP_ALU 0b0110011
 #define OP_SYSTEM 0b1110011
 
-unsigned int immgen(Instruction ins);
+inline unsigned int immgen(Instruction ins)
+{
+	unsigned int ret = 0;
+	switch (ins.rType.opcode)
+	{
+	case OP_LOAD:
+	case OP_ALU_IMM://itype
+	case OP_JALR:
+		ret = _sign_ext<12>(ins.iType.imm);
+		break;
+	case OP_BTYPE:
+		ret |= ((unsigned)(ins.bType.imm_4_1)) << 1;
+		ret |= ((unsigned)(ins.bType.imm_10_5)) << 5;
+		ret |= ((unsigned)(ins.bType.imm_11)) << 11;
+		ret |= ((unsigned)(ins.bType.imm_12)) << 12;
+		ret = _sign_ext<13>(ret);
+		break;
+	case OP_LUI:
+	case OP_AUIPC:
+		ret = ((unsigned)ins.uType.imm_31_12) << 12;
+		break;
+	case OP_STORE:
+		ret = ((unsigned)ins.sType.imm_4_0);
+		ret |= ((unsigned)ins.sType.imm_11_5) << 5;
+		ret = _sign_ext<12>(ret);
+		break;
+	case OP_JAL:
+		ret = ((unsigned)ins.jType.imm_10_1) << 1;
+		ret |= ((unsigned)ins.jType.imm_11) << 11;
+		ret |= ((unsigned)ins.jType.imm_19_12) << 12;
+		ret |= ((unsigned)ins.jType.imm_20) << 20;
+		break;
+	default:
+		break;
+	}
+	return ret;
+}
 
 #define MEME_OK 0
 #define MEME_ADDR_NOT_ALIGNED 1
@@ -287,6 +326,7 @@ public:
 private:
 	int _ins_exec_op_alu(Instruction ins);
 	static decltype(&Cpu_::_ins_exec_op_alu) _decodeheperfuncs[128];
+	MambaCache_* cache;
 	REGS regs;
 	unsigned int Mode;
 	struct mycpuwalktimeflags
@@ -305,6 +345,9 @@ private:
 	MemController memctrl;
 	unsigned int CSRs[4096];
 	void* thandle;
+	void* shandle;
+	unsigned long cycles;
+	int tstste_sus;
 	bool _csr_readable(int csrid);
 	bool _csr_writeable(int csrid);
 	static unsigned int ALUoperation(unsigned int a, unsigned int b, Instruction ins);
@@ -314,7 +357,6 @@ private:
 	void _make_exception(int code,unsigned int mtval);//set mepc = pc;
 	void _make_exception(int code);
 	void _make_mem_exception(unsigned int meme_code, unsigned io_code);
-	static unsigned long __stdcall cpurunthelper(void*);
 	void _wait_for_signal_run();//TODO
 	int _ins_exec_op_aluimm(Instruction ins);
 	int _ins_exec_op_load(Instruction ins);
@@ -328,10 +370,15 @@ private:
 	int _ins_exec_op_unknown(Instruction ins);
 	static void _init_ftable();
 	void ins_exec_d(CPUdebugger*);
+	void ins_exec_with_jit();//only support machine mod;
+	void exception_handler_unsafe(int ecode);
 public:
+	unsigned long runsync_with_jit();
 	void _init();//TODO
 	void runsync();
-	void runasync();
+	void run_with_jit();
+	void set_flag_async();
+	void _invoke();
 	Cpu_(unsigned int mem_sz = 0x2000000);
 	friend class CPUdebugger;
 };

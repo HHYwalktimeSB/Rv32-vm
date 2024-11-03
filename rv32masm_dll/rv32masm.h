@@ -7,8 +7,10 @@
 
 #ifdef _DLL
 #define MY_API extern "C" __declspec(dllexport) 
-#else
+#else 
+#ifndef MY_API 
 #define MY_API extern "C"
+#endif
 #endif // _DLL
 
 MY_API unsigned int make_1(const char* comm, int id_table_iptr);

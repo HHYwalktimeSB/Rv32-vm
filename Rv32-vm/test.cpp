@@ -22,6 +22,6 @@ int main() {
 	debug.setpc(0x80000000);
 	debug.simple_run();
 
-	system("pause");
+	//system("pause");
 	return 0;
 }	

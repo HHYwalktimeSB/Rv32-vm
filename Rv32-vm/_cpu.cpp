@@ -15,6 +15,9 @@ void Cpu_::_init()
 	for (auto i = 0; i < 4096; i++)
 		CSRs[i] = 0;
 	Mode = MODE_MACHINE;
+	regs.instruction_ecode = -1;
+	//regs.csrs = CSRs;
+	cache = new MambaCache_((char*)memctrl.memory.native_ptr());
 	*reinterpret_cast<unsigned int*>( &debugflags) = 0;
 	debugflags.flag_run = 1;
 	debugflags.one_step = 0;
@@ -34,7 +37,7 @@ bool Cpu_::_csr_writeable(int csrid)
 
 unsigned int Cpu_::ALUoperation(unsigned int a, unsigned int b, Instruction ins)
 {
-	unsigned int ret;
+	unsigned int ret = 0;
 	if (ins.bType.opcode == OP_ALU_IMM && 
 		ins.rType.funct3 != 0b101) 
 		ins.rType.funct7 = 0;
@@ -365,13 +368,9 @@ void Cpu_::_make_mem_exception(unsigned int meme_code, unsigned io_code)
 	}
 }
 
-void Cpu_::_wait_for_signal_run()
-{
-}
-
 int Cpu_::_ins_exec_op_alu(Instruction ins)
 {
-	register int res,a = regs.x[ins.rType.rs1],b = regs.x[ins.rType.rs2];
+	register int res = 0,a = regs.x[ins.rType.rs1],b = regs.x[ins.rType.rs2];
 	switch (ins.rType.funct3)
 	{
 	case 0:
@@ -651,56 +650,19 @@ void Cpu_::runsync()
 			break;
 		}
 		if (debugflags.eflag)
-			_into_trap();
+			return;
 		if (debugflags.flag_int) 
 			_into_int();
 		if (debugflags.one_step && debugflags.flag_async) {
 			_wait_for_signal_run();
 		}
+		cycles++;
 	}
 }
 
 Cpu_::Cpu_(unsigned int mem_sz):memctrl(mem_sz, this->CSRs)
 {
 	thandle = nullptr;
-}
-
-unsigned int immgen(Instruction ins)
-{
-	unsigned int ret = 0;
-	switch (ins.rType.opcode)
-	{
-	case OP_LOAD:
-	case OP_ALU_IMM://itype
-	case OP_JALR:
-		ret = _sign_ext<12>(ins.iType.imm);
-		break;
-	case OP_BTYPE:
-		ret |= ((unsigned)(ins.bType.imm_4_1)) << 1;
-		ret |= ((unsigned)(ins.bType.imm_10_5)) << 5;
-		ret |= ((unsigned)(ins.bType.imm_11)) << 11;
-		ret |= ((unsigned)(ins.bType.imm_12)) << 12;
-		ret = _sign_ext<13>(ret);
-		break;
-	case OP_LUI:
-	case OP_AUIPC:
-		ret = ((unsigned)ins.uType.imm_31_12) << 12;
-		break;
-	case OP_STORE:
-		ret = ((unsigned)ins.sType.imm_4_0);
-		ret |= ((unsigned)ins.sType.imm_11_5) << 5;
-		ret = _sign_ext<12>(ret);
-		break;
-	case OP_JAL:
-		ret = ((unsigned)ins.jType.imm_10_1) << 1;
-		ret |= ((unsigned)ins.jType.imm_11) << 11;
-		ret |= ((unsigned)ins.jType.imm_19_12) << 12;
-		ret |= ((unsigned)ins.jType.imm_20) << 20;
-		break;
-	default:
-		break;
-	}
-	return ret;
 }
 
 unsigned int __fastcall chk_can_rw_(unsigned int pe, int io_flag) {
@@ -1237,7 +1199,22 @@ void CPUdebugger::bind(Cpu_* pc)
 
 void CPUdebugger::simple_run()
 {
+	auto s = clock();
+	pcpu->runsync_with_jit();
+	s = clock() - s;
+	std::cout <<"jit " << s << "\ncycles: " << pcpu->regs.x[1] <<std::endl;
+	setpc(0x80000000);
+	pcpu->regs.x[1] = 0;
+	s = clock();
+	pcpu->runsync();
+	s = clock() - s;
+	std::cout <<"no jit " << s << "\ncycles: " << pcpu->regs.x[1] << std::endl;
+	setpc(0x80000000);
+	pcpu->regs.x[1] = 0;
+	s = clock();
 	pcpu->ins_exec_d(this);
+	s = clock() - s;
+	std::cout << "no jitv2: " << s << "\ncycles: " << pcpu->regs.x[1] << std::endl;
 }
 
 void CPUdebugger::quick_setup(unsigned int memsize)
@@ -1414,12 +1391,10 @@ void Cpu_::ins_exec_d(CPUdebugger* debug)
 	int ecode;
 	unsigned int ins;
 	unsigned long long iid;
-	_cpustate stat;
 	int c_run = 1;
 _funcstart:
 	__try {
 		while (c_run!=0) {
-			debug->writecpustate(&stat);
 			if (regs.pc & 3) {
 				ecode = EXC_INSTRUCTION_ADDR_NOT_ALIGNED;
 				goto _handle_exceptions;
@@ -1440,6 +1415,7 @@ _funcstart:
 					cout << "instruction address not aligned at 0x" << hex <<regs.pc << endl;
 					break;
 				case EXC_INV_INSTRUCTION:
+					return;
 					cout << "invalid instruction at 0x" << hex << regs.pc << "\nval = 0x" << memctrl.memory._readp32(regs.pc) << endl;
 					break;
 				case EXC_LOAD_ADDR_NOT_ALIGNED:
@@ -1453,8 +1429,7 @@ _funcstart:
 				}
 			}
 			else regs.pc += 4;
-			debug->cmpcpustate(&stat);
-			cin >> c_run;
+			cycles++;
 		}
 	}
 	__except (iid = reinterpret_cast<unsigned long long>(GetExceptionInformation()), 
@@ -1465,4 +1440,91 @@ _funcstart:
 		
 	}
 	if (c_run!=0) goto _funcstart;
+}
+
+void Cpu_::ins_exec_with_jit()
+{
+	unsigned paddr = 0;
+	int res = call_my_fn(cache->read(regs.pc & 0x7fffffff), &regs);
+	switch (res)
+	{case 0:
+		break;
+	case RC_RRT_MEMLOAD:
+	case RC_RRT_MEMSTORE:
+	case RC_RRT_INV_INSTRUCTION:
+		printf("err! invins\n");
+		break;
+	case RC_RRT_SYSCALL:
+		break;
+	}
+	regs.pc += 4;
+}
+
+unsigned long Cpu_::runsync_with_jit()
+{
+	unsigned long long addr = 0;
+	int ecode;
+	__func_start:
+	__try {
+		while (debugflags.flag_run) {
+			if (Mode != MODE_MACHINE) { 
+				addr = memctrl.vaddr_to_paddr_exec_unsafe(addr, Mode);
+			}
+			else addr = regs.pc & 0x7fffffff;
+			ecode = call_my_fn(cache->read_withoutHAJIfunction(regs.pc & 0x7fffffff), &regs);
+			switch (ecode) {
+			case 0:
+				regs.pc += 4;
+				cycles++;
+				if (debugflags.flag_async && debugflags.one_step)_wait_for_signal_run();
+				continue;
+			case RC_RRT_INV_INSTRUCTION:
+				return 0;
+				break;
+			case RC_RRT_SYSCALL:
+				break;
+			case RC_RRT_MEMLOAD:
+				break;
+			case RC_RRT_MEMSTORE:
+				break;
+			}
+			regs.pc += 4;
+			if (debugflags.flag_async && debugflags.one_step)_wait_for_signal_run();
+		}
+	}
+	__except (addr = reinterpret_cast<unsigned long long>(GetExceptionInformation()),
+		GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+		VirtualAlloc(reinterpret_cast<void*>(
+			reinterpret_cast<_EXCEPTION_POINTERS*>(addr)->ExceptionRecord->ExceptionInformation[1] & 0xFFFFFFFFFFFFF000),
+			4096, MEM_COMMIT, PAGE_READWRITE);
+	}
+	if (debugflags.flag_run) goto __func_start;
+	return 0;
+}
+
+#include<thread>
+
+void Cpu_::run_with_jit()
+{
+	std::thread th(&Cpu_::runsync_with_jit, this);
+	thandle = th.native_handle();
+	th.detach();
+}
+
+void Cpu_::_invoke()
+{
+	if (debugflags.flag_async&&debugflags.one_step) {
+		if (this->tstste_sus == 1&& thandle!=nullptr) {
+			ResumeThread(thandle);
+		}
+	}
+}
+
+void Cpu_::_wait_for_signal_run()
+{
+	if (thandle != nullptr)
+	{
+		tstste_sus = 1;
+		SuspendThread(thandle);
+	}
 }

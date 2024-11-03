@@ -239,7 +239,7 @@ std::string get_para(const string& str, unsigned int& iptr) {
 
 unsigned get_imm(const std::string& id, tag_table& table, int el) {
     if (id.length() == 0)throw inv_id;
-    if ('0' <= id[0] && id[0] <= '9') return atoi(id.c_str());
+    if (('0' <= id[0] && id[0] <= '9')||id[0]=='-') return atoi(id.c_str());
     auto a = table.find(id);
     if (a != table.end())return a->second - (el << 2);
     throw inv_id;

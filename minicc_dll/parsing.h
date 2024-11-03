@@ -55,6 +55,17 @@ struct LoopCtrlinfo {
 	int loop_sp;
 };
 
+class _exprNode {
+	_vty_description type_and_type_descr;
+	int addr_and_alloc_info;
+	struct 
+	{
+		unsigned is_lval : 1;//0 for rval
+		unsigned in_register : 1;
+		unsigned seek_addr_reg : 5;
+	} addinfo;
+};
+
 Token* parse_brace_(Stable& table, Token*, Machine_state& ms, parsing_o_s& out, const char* reg_name, LoopCtrlinfo* loopctrl, int cnt_rec_depth);
 
 //stop when meet ';' or ')'
@@ -64,13 +75,14 @@ Token* parse_var_global(Stable& table, Token* tk, parsing_o_s& out);
 
 Token* cedclcall(Machine_state& ms, parsing_o_s& o, const char* fn, Token*);
 
-//code gen
+#include<stack>
 
-//push s0, s0 = sp + s
+void eval(Machine_state& ms, parsing_o_s& o, Token* , std::stack<_exprNode>&sdata);
+
+//code gen
+std::string get_function_name(const char* fn);
 
 #define RVCCCALL_STACK_OFFSET 64
-void push_fp(Machine_state & ms, parsing_o_s & o);
-
 void rvcccall(Machine_state& ms, parsing_o_s& o);
 
 void rvccret(Machine_state& ms, parsing_o_s& o);
@@ -80,6 +92,8 @@ void rvccret(Machine_state& ms, parsing_o_s& o);
 void rvcccall_fast(Machine_state& ms, parsing_o_s& o);//store ra and a7
 
 void rvccret_fast(Machine_state& ms, parsing_o_s& o);
+
+void loadlvaladdr(parsing_o_s& o, Machine_state& ms, Token* tk, const char* dstreg);
 
 void cedclretcu(Machine_state& ms, parsing_o_s& o, const char* fn);
 

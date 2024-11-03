@@ -37,13 +37,16 @@ void init_keyword_map();
 #define TKV_OP_INC 1
 #define TKV_OP_DEC 2
 
-#define TKV_OP_PTR 3
+#define TKV_OP_PTRACCEES 3
 #define TKV_OP_NORMAL 0
 
 #define TKV_OP_AND 4
 #define TKV_OP_OR 5
 
 #define TKV_OP_PLACEHOLDER_ASSIGN 114
+
+#define TKV_OP_LS 6
+#define TKV_OP_RS 7
 
 typedef struct Token_ {
 	String str;
