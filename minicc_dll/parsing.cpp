@@ -510,15 +510,15 @@ Token* parse_statment(Stable& table, Token* tk, Machine_state& ms, parsing_o_s& 
 	_exprNode tmp;
 	while (tk) {
 		if (tk->str.str[0] == ';' || tk->str.str[0] == ',')break;
-		if (tk->str.str[0] == ')' || left_brace_cnt == 0)break;
-		if (tk->str.str[0] == '(' && tk->next->type == TK_TYPE_KEYWORD) {
+		if (tk->str.str[0] == ')' && left_brace_cnt == 0)break;
+		if (tk->str.str[0] == '(' &&(tk->next)&&  tk->next->type == TK_TYPE_KEYWORD) {
 			tk = tk->next;
-			//cast 
+			//type cast 
 			while (tk) {
 
 			}
 		}
-		if (tk->type == TK_TYPE_ID || tk->type == TK_TYPE_NUMBER) {
+		if (tk&& tk->type == TK_TYPE_ID || tk->type == TK_TYPE_NUMBER) {
 			//nodes.push(tk);
 		}
 		else {

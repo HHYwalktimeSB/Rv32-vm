@@ -5,16 +5,26 @@
 
 #ifdef _DLL
 #define MY_API extern "C" __declspec(dllexport)
+#define MY_API_V2 __declspec(dllexport)
 #else 
 #ifndef MY_API 
 #define MY_API extern "C"
+#define MY_API_V2 
 #endif
 #endif // _DLL
 
-//return 0 for no need after processing, return 1 for memory load op, return 2 for mem write, 3 for syscall
-MY_API int __fastcall call_my_fn(const void* pfn, void* preg);
+struct _MyFnRetStruct {
+    unsigned vaddr;
+    unsigned REG : 5;
+    unsigned F3 : 3;
+    unsigned SB : 2;//sign_bytes
+    unsigned EC : 21;//ecode
+};
 
-MY_API unsigned c_instruction(unsigned int ins, char* buf, unsigned& rrc);
+//63:32 vaddr, 32:27 io_regret, 26:0 error code
+MY_API_V2 unsigned long long __fastcall call_my_fn(const void* pfn, void* preg);
+
+MY_API unsigned c_instruction(unsigned int ins, char* buf);
 
 MY_API void call_test_fn();
 
@@ -27,8 +37,6 @@ MY_API void call_test_fn();
 #define RC_RRT_MEMSTORE 2
 #define RC_RRT_SYSCALL 3
 #define RC_RRT_INV_INSTRUCTION 4
-
-MY_API const void* _getfptr001(int rc);
 
 class MambaEntry_ {
 public:
@@ -48,26 +56,23 @@ public:
         constexpr inline LineDescription():V(0), A(0), C(0) { }
     };
 private:
-    const void* fptr[4][mambaCACHELINE_SZ/4];
+    const void* fptr[mambaCACHELINE_SZ];
     LineDescription description[4];
     char* buf;
     unsigned* binding_pmeml;
-    inline const void* getVaddr(unsigned addr)const {
-        addr >>= 2;
-        return fptr[(addr>>4)&3][addr&15];
-    }
+    unsigned mem_mask;
     void construct_buf();
     void deconstruct_buf();
-    void vfprotect_set(unsigned vflags);
+    //void vfprotect_set(unsigned vflags);
 public:
     void compile_1(unsigned* pmem, unsigned addr);
     const void*  __fastcall read(unsigned addr);
     void flush();
     void write(unsigned addr);
     unsigned cnt_all()const;
-    void bind(unsigned* pmem);
+    void bind(unsigned* pmem, unsigned ma);
     MambaEntry_();
-    MambaEntry_(unsigned* base_ptr);
+    MambaEntry_(unsigned* base_ptr, unsigned ma);
     ~MambaEntry_();
     friend class MambaCache_;
 };
@@ -86,6 +91,7 @@ protected:
     Node* table[512];
     int cnt_nds[512];
     char* base;
+    unsigned mam_mask;
     int getHeight(struct Node* n);
     Node* createNode(int key, MambaEntry_* e);
     int getBalanceFactor(struct Node* n);
@@ -108,9 +114,12 @@ protected:
 public:
     void add(unsigned addr, unsigned index);
     void bind(char* addrbase);
-    __declspec(dllexport) const void* read(unsigned addr);
-    __declspec(dllexport) MambaCache_(char* base);
-    __declspec(dllexport) const void* read_withoutHAJIfunction(unsigned addr);
+    __declspec(dllexport)
+        const void* read(unsigned addr);
+    __declspec(dllexport) 
+        MambaCache_(char* base, unsigned ma);
+    __declspec(dllexport)
+        const void* read_withoutHAJIfunction(unsigned addr);
 };
 
 #endif // !_JITTOOLS_H_

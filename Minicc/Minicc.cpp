@@ -23,15 +23,22 @@ void fuck(const char*& c) {
     ++cntrv;
 }
 
+using namespace std;
+
 int main()
 {
-    unsigned xxxxx;
-    const char* str[] = { "add x1, x2, x3" ,"add x0, x1, x0", "blt,  x1, x2, 16", "bge, x1,x2, 16"};
-    gothrough_array(str, fuck);
+    unsigned xxxx;
+    fstream fss;
+    string str;
+    call_test_fn();
+    fss.open("../x64/Debug/test.txt", ios::in);
     unsigned int cnt = 0;
     unsigned cnt_sz = 0;
-    for (unsigned i = 0; i < cntrv; ++i) {
-        call_test_fn();
+    char* ffff;
+    while (fss >> str) {
+        str = "0x" + str;
+        xxxx = strtol(str.c_str(),&ffff,16) ;
+        cnt_sz += c_instruction(xxxx, bufi + cnt_sz);
     }
     FILE* fs;
     fopen_s(&fs, "ins_86", "wb");

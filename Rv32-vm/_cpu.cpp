@@ -17,11 +17,10 @@ void Cpu_::_init()
 	Mode = MODE_MACHINE;
 	regs.instruction_ecode = -1;
 	//regs.csrs = CSRs;
-	cache = new MambaCache_((char*)memctrl.memory.native_ptr());
+	if(!cache)cache = new MambaCache_((char*)memctrl.memory.native_ptr(), memctrl.memory.mask());
 	*reinterpret_cast<unsigned int*>( &debugflags) = 0;
 	debugflags.flag_run = 1;
 	debugflags.one_step = 0;
-	_init_ftable();
 }
 
 bool Cpu_::_csr_readable(int csrid)
@@ -75,213 +74,6 @@ unsigned int Cpu_::ALUoperation(unsigned int a, unsigned int b, Instruction ins)
 		break;
 	}
 	return ret;
-}
-
-void Cpu_::ins_exec(Instruction ins)
-{
-	if (regs.pc & 3) {
-		_make_exception(EXC_INSTRUCTION_ADDR_NOT_ALIGNED,*reinterpret_cast<unsigned int*>(&ins));
-		return;
-	}
-	switch (ins.rType.opcode)
-	{
-	case OP_ALU:
-		if (ins.rType.rd != 0)
-			regs.x[ins.rType.rd] =
-			ALUoperation(regs.x[ins.rType.rs1], regs.x[ins.rType.rs2], ins);
-		break;
-	case OP_ALU_IMM:
-		if (ins.rType.rd != 0)
-			regs.x[ins.iType.rd] =
-			ALUoperation(regs.x[ins.iType.rs1], immgen(ins), ins);
-		break;
-	case OP_LOAD:
-	{
-		unsigned long long _ret_buf;
-		unsigned int addr = static_cast<int>(regs.x[ins.iType.rs1]) + static_cast<int>(immgen(ins));
-		switch (ins.iType.funct3)
-		{
-		case 0://lb
-			_ret_buf = memctrl.read8(addr, Mode);
-			if (_ret_buf & 0xffffffff) {
-				_make_mem_exception(_ret_buf & 0xffffffff, IOF_READ);
-				CSRs[(int)CSRid::mtval] = addr;
-				EXEC_INS1_ABORT;
-			}
-			if (ins.iType.rd != 0) regs.x[ins.iType.rd] = _sign_ext<8>(GET_MEM_RW_RESULT_VAL(_ret_buf));
-			break;
-		case 1:
-			_ret_buf = memctrl.read16(addr, Mode);
-			if (_ret_buf & 0xffffffff) {
-				_make_mem_exception(_ret_buf & 0xffffffff,IOF_READ);
-				CSRs[(int)CSRid::mtval] = addr;
-				EXEC_INS1_ABORT;
-			}
-			if (ins.iType.rd != 0) regs.x[ins.iType.rd] = _sign_ext<16>(GET_MEM_RW_RESULT_VAL(_ret_buf));
-			break;
-		case 2:
-			_ret_buf = memctrl.read32(addr, Mode);
-			if (_ret_buf & 0xffffffff) {
-				_make_mem_exception(_ret_buf & 0xffffffff,IOF_READ);
-				CSRs[(int)CSRid::mtval] = addr;
-				EXEC_INS1_ABORT;
-			}
-			if (ins.iType.rd != 0) regs.x[ins.iType.rd] =GET_MEM_RW_RESULT_VAL(_ret_buf);
-			break;
-		case 3:
-			_ret_buf = memctrl.read32(addr, Mode);
-			if (_ret_buf & 0xffffffff) {
-				_make_mem_exception(_ret_buf & 0xffffffff, IOF_READ);
-				CSRs[(int)CSRid::mtval] = addr;
-				EXEC_INS1_ABORT;
-			}
-			if (ins.iType.rd != 0) regs.x[ins.iType.rd] = GET_MEM_RW_RESULT_VAL(_ret_buf);
-			break;
-		case 4:
-			_ret_buf = memctrl.read32(addr, Mode);
-			if (_ret_buf & 0xffffffff) {
-				_make_mem_exception(_ret_buf & 0xffffffff, IOF_READ);
-				CSRs[(int)CSRid::mtval] = addr;
-				EXEC_INS1_ABORT;
-			}
-			if (ins.iType.rd != 0) regs.x[ins.iType.rd] = GET_MEM_RW_RESULT_VAL(_ret_buf);
-			break;
-		default:
-			this->_make_exception(EXC_INV_INSTRUCTION, *reinterpret_cast<unsigned int*>(&ins));
-			return;
-		}
-	}
-	break;
-	case OP_STORE: 
-	{
-		unsigned int _ret_buf;
-		unsigned int addr = static_cast<int>(regs.x[ins.sType.rs1]) + static_cast<int>(immgen(ins));
-		switch (ins.sType.funct3)
-		{
-		case 0:
-			_ret_buf = memctrl.write8(addr, regs.x[ins.sType.rs2], Mode);
-			if (_ret_buf != 0) {
-				_make_mem_exception(_ret_buf, IOF_WRITE);
-				CSRs[(int)CSRid::mtval] = addr;
-				EXEC_INS1_ABORT;
-			}
-			break;
-		case 1:
-			_ret_buf = memctrl.write16(addr, regs.x[ins.sType.rs2], Mode);
-			if (_ret_buf != 0) {
-				_make_mem_exception(_ret_buf, IOF_WRITE);
-				CSRs[(int)CSRid::mtval] = addr;
-				EXEC_INS1_ABORT;
-			}
-			break;
-		case 3:
-			_ret_buf = memctrl.write32(addr, regs.x[ins.sType.rs2], Mode);
-			if (_ret_buf != 0) {
-				_make_mem_exception(_ret_buf, IOF_WRITE);
-				CSRs[(int)CSRid::mtval] = addr;
-				EXEC_INS1_ABORT;
-			}
-			break;
-		default:
-			_make_exception(EXC_INV_INSTRUCTION, *reinterpret_cast<unsigned int*>(&ins));
-			return;
-		}
-	}
-	break;
-	case OP_BTYPE:
-	{
-		bool if_jmp;
-		switch (ins.bType.funct3)
-		{
-		case 0:
-			if_jmp = regs.x[ins.bType.rs1] == regs.x[ins.bType.rs2];
-			break;
-		case 1:
-			if_jmp = regs.x[ins.bType.rs1] != regs.x[ins.bType.rs2];
-			break;
-		case 4:
-			if_jmp = static_cast<int>(regs.x[ins.bType.rs1]) < static_cast<int>(regs.x[ins.bType.rs2]);
-			break;
-		case 5:
-			if_jmp = static_cast<int>(regs.x[ins.bType.rs1]) >= static_cast<int>(regs.x[ins.bType.rs2]);
-			break;
-		case 6:
-			if_jmp = regs.x[ins.bType.rs1] < regs.x[ins.bType.rs2];
-			break;
-		case 7:
-			if_jmp = regs.x[ins.bType.rs1] >= regs.x[ins.bType.rs2];
-			break;
-		default:
-			_make_exception(EXC_INV_INSTRUCTION, *reinterpret_cast<unsigned int*>(&ins));
-			return;
-		}
-		if (if_jmp) {
-			regs.pc += static_cast<int>(immgen(ins));
-			EXEC_INS1_ABORT;
-		}
-	}
-	break;
-	case OP_JAL:
-		if (ins.jType.rd != 0)
-			regs.x[ins.jType.rd] = regs.pc + 4;
-		regs.pc += static_cast<int>(immgen(ins));
-		EXEC_INS1_ABORT;
-	case OP_JALR:
-		if (ins.iType.rd != 0)
-			regs.x[ins.iType.rd] = regs.pc + 4;
-		regs.pc = static_cast<int>(regs.x[ins.iType.rs1]) + static_cast<int>(immgen(ins));
-		EXEC_INS1_ABORT;
-	case OP_LUI:
-		if (ins.uType.rd != 0)
-			regs.x[ins.uType.rd] =
-			immgen(ins);
-		break;
-	case OP_AUIPC:
-		if (ins.uType.rd != 0)
-			regs.x[ins.uType.rd] = regs.pc +
-			static_cast<int>(immgen(ins));
-		break;
-	case OP_SYSTEM:
-		switch (ins.iType.funct3)
-		{
-		case 0b001:
-			//csrrw
-			if (ins.iType.rd != 0 && _csr_readable(ins.iType.imm))regs.x[ins.iType.rd] = CSRs[ins.iType.imm];
-			if (ins.iType.imm != 0 && _csr_writeable(ins.iType.imm)) CSRs[ins.iType.imm] = regs.x[ins.iType.rs1];
-			break;
-		case 0b010://csrrs
-			if (ins.iType.rd != 0 && _csr_readable(ins.iType.imm))regs.x[ins.iType.rd] = CSRs[ins.iType.imm];
-			if (ins.iType.imm != 0 && _csr_writeable(ins.iType.imm)) CSRs[ins.iType.imm] |= regs.x[ins.iType.rs1];
-			break;
-		case 0b011://csrrc
-			if (ins.iType.rd != 0 && _csr_readable(ins.iType.imm))regs.x[ins.iType.rd] = CSRs[ins.iType.imm];
-			if (ins.iType.imm != 0 && _csr_writeable(ins.iType.imm)) CSRs[ins.iType.imm] &= (regs.x[ins.iType.rs1] ^0xffffffff); 
-			break;
-		case 0b101://csrrwi
-			if (ins.iType.rd != 0 && _csr_readable(ins.iType.imm))regs.x[ins.iType.rd] = CSRs[ins.iType.imm];
-			if (ins.iType.rs1 != 0 && _csr_writeable(ins.iType.imm)) CSRs[ins.iType.imm] =
-				_sign_ext <5>(ins.iType.rs1);
-			break;
-		case 0b110://csrrsi
-			if (ins.iType.rd != 0 && _csr_readable(ins.iType.imm))regs.x[ins.iType.rd] = CSRs[ins.iType.imm];
-			if (ins.iType.rs1 != 0 && _csr_writeable(ins.iType.imm)) CSRs[ins.iType.imm] |=
-				_sign_ext <5>( ins.iType.rs1 );
-			break;
-		case 0b111:
-			if (ins.iType.rd != 0 && _csr_readable(ins.iType.imm))regs.x[ins.iType.rd] = CSRs[ins.iType.imm];
-			if (ins.iType.rs1 != 0 && _csr_writeable(ins.iType.imm)) CSRs[ins.iType.imm] &=
-				( _sign_ext <5>(ins.iType.rs1) ^ 0xffffffff );
-			break;
-		default:
-			break;
-		}
-		break;
-	default://TODO
-		_make_exception(EXC_INV_INSTRUCTION, *reinterpret_cast<unsigned int*>(&ins));
-		EXEC_INS1_ABORT;
-		break;
-	}
-	regs.pc += 4;
 }
 
 void Cpu_::_into_trap()
@@ -409,7 +201,7 @@ int Cpu_::_ins_exec_op_alu(Instruction ins)
 
 int Cpu_::_ins_exec_op_aluimm(Instruction ins)
 {
-	register int res, a = regs.x[ins.rType.rs1], b = immgen(ins);
+	register int res = 0, a = regs.x[ins.rType.rs1], b = immgen(ins);
 	switch (ins.rType.funct3)
 	{
 	case 0:
@@ -456,7 +248,7 @@ int Cpu_::_ins_exec_op_load(Instruction ins)
 		_ret_buf = memctrl.read_unsafe(addr, Mode | (1 << 2));
 		if (_ret_buf & 0xffffffff) {
 			CSRs[(int)CSRid::mtval] = addr;
-			return _ret_buf;
+			return (int)_ret_buf;
 		}
 		if (ins.iType.rd != 0) regs.x[ins.iType.rd] = _sign_ext<8>(GET_MEM_RW_RESULT_VAL(_ret_buf));
 		break;
@@ -464,7 +256,7 @@ int Cpu_::_ins_exec_op_load(Instruction ins)
 		_ret_buf = memctrl.read_unsafe(addr, Mode | (2 << 2));
 		if (_ret_buf & 0xffffffff) {
 			CSRs[(int)CSRid::mtval] = addr;
-			return _ret_buf;
+			return (int)_ret_buf;
 		}
 		if (ins.iType.rd != 0) regs.x[ins.iType.rd] = _sign_ext<16>(GET_MEM_RW_RESULT_VAL(_ret_buf));
 		break;
@@ -472,25 +264,23 @@ int Cpu_::_ins_exec_op_load(Instruction ins)
 		_ret_buf = memctrl.read_unsafe(addr, Mode | (4 << 2));
 		if (_ret_buf & 0xffffffff) {
 			CSRs[(int)CSRid::mtval] = addr;
-			return _ret_buf;
+			return (int)_ret_buf;
 		}
 		if (ins.iType.rd != 0) regs.x[ins.iType.rd] = GET_MEM_RW_RESULT_VAL(_ret_buf);
 		break;
 	case 4:
 		_ret_buf = memctrl.read_unsafe(addr, Mode | (1 << 2));
 		if (_ret_buf & 0xffffffff) {
-			_make_mem_exception(_ret_buf & 0xffffffff, IOF_READ);
 			CSRs[(int)CSRid::mtval] = addr;
-			return _ret_buf;
+			return (int)_ret_buf;
 		}
 		if (ins.iType.rd != 0) regs.x[ins.iType.rd] = GET_MEM_RW_RESULT_VAL(_ret_buf);
 		break;
 	case 5:
 		_ret_buf = memctrl.read_unsafe(addr, Mode | (2 << 2));
 		if (_ret_buf & 0xffffffff) {
-			_make_mem_exception(_ret_buf & 0xffffffff, IOF_READ);
 			CSRs[(int)CSRid::mtval] = addr;
-			return EXC_INV_INSTRUCTION;
+			return (int)_ret_buf;
 		}
 		if (ins.iType.rd != 0) regs.x[ins.iType.rd] = GET_MEM_RW_RESULT_VAL(_ret_buf);
 		break;
@@ -624,45 +414,22 @@ void Cpu_::_init_ftable()
 
 }
 
-void Cpu_::runsync()
-{
-	unsigned long long result;
-	Instruction ins;
-	while (debugflags.flag_run)
-	{
-		result = memctrl.read_ins(regs.pc, Mode);
-		switch (result&0xffffffff)
-		{
-		case MEME_OK:
-			*reinterpret_cast<unsigned int*>(&ins) = GET_MEM_RW_RESULT_VAL(result);
-			this->ins_exec(ins);
-				break;
-		case	MEME_ACCESS_DENIED:
-			_make_exception(EXC_INSTRUCTION_ACCESS_FAULT, regs.pc);
-			break;
-		case	MEME_ADDR_NOT_ALIGNED:
-			_make_exception(EXC_INSTRUCTION_ADDR_NOT_ALIGNED , regs.pc);
-			break;
-		case MEME_PAGE_FAULT:
-			_make_exception(EXC_INSTRUCTION_PAGE_FAULT, regs.pc);
-			break;
-		default:
-			break;
-		}
-		if (debugflags.eflag)
-			return;
-		if (debugflags.flag_int) 
-			_into_int();
-		if (debugflags.one_step && debugflags.flag_async) {
-			_wait_for_signal_run();
-		}
-		cycles++;
-	}
-}
-
 Cpu_::Cpu_(unsigned int mem_sz):memctrl(mem_sz, this->CSRs)
 {
 	thandle = nullptr;
+	Mode = 0;
+	cache = 0;
+	debugflags = { 0 };
+	regs = { 0 };
+	shandle = nullptr;
+	tstste_sus = 0;
+	CSRs = new unsigned[4096];
+}
+
+Cpu_::~Cpu_()
+{
+	delete[] CSRs;
+	if (cache)delete cache;
 }
 
 unsigned int __fastcall chk_can_rw_(unsigned int pe, int io_flag) {
@@ -707,7 +474,24 @@ unsigned int __fastcall chk_can_rw_(unsigned int pe, int io_flag) {
 
 unsigned long long MemController::shared_io_interfence(unsigned int addr, unsigned int ioinfo, ...)
 {
-	return 0;
+	unsigned long long r;
+	_DevBase* dev;
+	if (addr < 0x40000000) {
+		r = (addr & 0x70000000) / (0x40000000 / _DEV_lower_allocsz);
+		dev = loweraddrdevs[(unsigned short)r];
+		if (dev == nullptr)return 0;
+	}
+	else {
+		r = (addr & 0x70000000) / (0x40000000 / _DEV_upper_allocsz);
+		dev = upperaddrdev[(unsigned short)r];
+		if (dev == nullptr)return 0;
+	}
+	if (mioflag_read & ioinfo) {
+
+	}
+	else {
+
+	}
 }
 
 unsigned long long MemController::read_ins(unsigned int addr, unsigned int mode)
@@ -1010,8 +794,8 @@ inline unsigned long long MemController::vaddr_to_paddr_write_unsafe(unsigned in
 
 unsigned long long MemController::read_unsafe(unsigned int addr, unsigned int mode)
 {
-	unsigned long long ret;
-	if (mode != 3 && (cpuCSRs[(int)CSRid::stap] & MASK_STAP_MODE)) {
+	unsigned long long ret = 0;
+	if ((mode&3) != 3 && (cpuCSRs[(int)CSRid::stap] & MASK_STAP_MODE)) {
 		ret = vaddr_to_paddr_read_unsafe(addr, mode & 3);
 		if ((ret & 0xffffffff) == 0) {
 			addr = GET_MEM_RW_RESULT_VAL(ret);
@@ -1033,37 +817,33 @@ unsigned long long MemController::read_unsafe(unsigned int addr, unsigned int mo
 		}
 		else return ret;
 	}
-	else {
+	else if(addr& 0x80000000){
+		addr &= 0x7fffffff;
 		switch (mode >> 2)
 		{
 		case 1:
-			ret = (addr & 0x80000000) ? *reinterpret_cast<unsigned short*>
-				(membase + (addr & 0x7fffffff & mem_mask))
-				: shared_io_interfence(addr, mioflag_read | 2);
+			ret =  *reinterpret_cast<unsigned short*>(membase + (addr & mem_mask));
 			break;
 		case 2:
 			if (addr & 1) return EXC_LOAD_ADDR_NOT_ALIGNED;
-			ret = (addr & 0x80000000) ? *reinterpret_cast<unsigned short*>
-				(membase + (addr & 0x7fffffff & mem_mask))
-				: shared_io_interfence(addr, mioflag_read | 2);
+			ret = *reinterpret_cast<unsigned short*>(membase + (addr & mem_mask));
 			break;
 		case 4:
 			if (addr & 3) return EXC_LOAD_ADDR_NOT_ALIGNED;
-			ret = (addr & 0x80000000) ? *reinterpret_cast<unsigned int*>
-				(membase + (addr & 0x7fffffff & mem_mask))
-				: shared_io_interfence(addr, mioflag_read | 4);
+			ret = *reinterpret_cast<unsigned int*>(membase + (addr & mem_mask));
 			break;
 		}
 	}
+	else ret = shared_io_interfence(addr, mioflag_read | (mode>>2) );
 	if (reinterpret_cast<tagCSR::tagmstatush*>(&cpuCSRs[(int)CSRid::mstatush])->MBE)
 	{
 		switch (mode >> 2)
 		{
 		case 2:
-			ret = bl_endian_switch16(ret);
+			ret = bl_endian_switch16((unsigned short)ret);
 			break;
 		case 4:
-			ret = bl_endian_switch32(ret);
+			ret = bl_endian_switch32((unsigned int)ret);
 		}
 	}
 	return ret << 32;
@@ -1073,7 +853,7 @@ unsigned int MemController::write_unsafe(unsigned int addr, unsigned int val, un
 {
 	if (reinterpret_cast<tagCSR::tagmstatush*>(&cpuCSRs[(int)CSRid::mstatush])->MBE)
 		val = bl_endian_switch32(val);
-	if (mode != 3 && (cpuCSRs[(int)CSRid::stap] & MASK_STAP_MODE)) {
+	if ((mode &3) != 3 && (cpuCSRs[(int)CSRid::stap] & MASK_STAP_MODE)) {
 		unsigned long long ret;
 		ret = vaddr_to_paddr_write_unsafe(addr, mode);
 		if ((ret & 0xffffffff) == 0) addr = GET_MEM_RW_RESULT_VAL(ret);
@@ -1101,11 +881,11 @@ unsigned int MemController::write_unsafe(unsigned int addr, unsigned int val, un
 			{
 			case 4:
 				if (addr & 3) return EXC_STORE_ADDR_NOT_ALIGNED;
-				*reinterpret_cast<unsigned char*>(membase + addr ) = val;
+				*reinterpret_cast<unsigned *>(membase + addr ) = val;
 				break;
 			case 2:
 				if (addr & 1) return EXC_STORE_ADDR_NOT_ALIGNED;
-				*reinterpret_cast<unsigned char*>(membase + addr) = (unsigned short )val;
+				*reinterpret_cast<unsigned short*>(membase + addr) = (unsigned short )val;
 				break;
 			case 1:
 				*reinterpret_cast<unsigned char*>(membase + addr) = (unsigned char)val;
@@ -1131,22 +911,11 @@ unsigned long long MemController::read_ins_unsafe(unsigned int addr, unsigned in
 			return MAKE_MEM_RW_RESULT_OK(*reinterpret_cast<unsigned int*>(membase + (addr & mem_mask & 0x7fffffff)));
 		}
 	}
+	return 0;
 }
 
-int CPUdebugger::run_1_cycle()
+MemController::~MemController()
 {
-	auto rr = pcpu->memctrl.read_ins(pcpu->regs.pc, pcpu->Mode);
-	if ((rr & 0xffffffff) != 0) {
-		throw (rr & 0xffffffff);
-	}
-	Instruction ins;
-	*reinterpret_cast<unsigned int*>(&ins) = GET_MEM_RW_RESULT_VAL(rr);
-	pcpu->ins_exec(ins);
-	if ((pcpu->debugflags.eflag)) {
-		pcpu->debugflags.eflag = 0;
-		return reinterpret_cast<tagCSR::tagmcause*> ( &pcpu->CSRs[(int)CSRid::mcause]) -> exception_code;
-	}
-	return EXC_NO_EXCEPTION;
 }
 
 void CPUdebugger::setpc(unsigned int val)
@@ -1191,6 +960,14 @@ int CPUdebugger::cmpcpustate(const _cpustate* prevstate)
 #include<fstream>
 #include<stdio.h>
 
+void CPUdebugger::printregs(unsigned int start, unsigned int end)
+{
+}
+
+void CPUdebugger::commit_command(const std::string& comm)
+{
+}
+
 void CPUdebugger::bind(Cpu_* pc)
 {
 	this->pcpu = pc;
@@ -1199,10 +976,14 @@ void CPUdebugger::bind(Cpu_* pc)
 
 void CPUdebugger::simple_run()
 {
+	_cpustate st;
+	this->writecpustate(&st);
 	auto s = clock();
 	pcpu->runsync_with_jit();
 	s = clock() - s;
-	std::cout <<"jit " << s << "\ncycles: " << pcpu->regs.x[1] <<std::endl;
+	std::cout <<"jit " << s << "\ncycles: " << pcpu->regs.cycles <<std::endl;
+	cmpcpustate(&st);
+	return;
 	setpc(0x80000000);
 	pcpu->regs.x[1] = 0;
 	s = clock();
@@ -1229,7 +1010,7 @@ void CPUdebugger::memwrite(const char* src, unsigned int dst_paddr, unsigned ele
 	dst_paddr &= 0x7fffffff;
 	unsigned char* prev_excptionaddr = nullptr;
 	if (element_cnt * element_sz + dst_paddr > this->pcpu->memctrl.memory.size())return;
-	int i = 0;
+	unsigned int i = 0;
 	unsigned char* membase = this->pcpu->memctrl.memory.native_ptr();
 	membase += dst_paddr;
 _func_start:
@@ -1277,7 +1058,7 @@ void CPUdebugger::readmem(unsigned int src_paddr, char* dst, unsigned element_sz
 	src_paddr &= 0x7fffffff;
 	unsigned char* prev_excptionaddr = nullptr;
 	if (element_cnt * element_sz + src_paddr > this->pcpu->memctrl.memory.size())return;
-	int i = 0;
+	unsigned int i = 0;
 	unsigned char* membase = this->pcpu->memctrl.memory.native_ptr();
 	membase += src_paddr;
 _func_start:
@@ -1337,7 +1118,7 @@ unsigned int CPUdebugger::loadmem_fromfile(const char* filename, unsigned int ds
 	fopen_s(&fp, filename, "rb");
 	if (!fp)return 0;
 	while (!feof(fp)) {
-		sz_read = fread(iobuf, 1, 4096, fp);
+		sz_read = (unsigned)fread(iobuf, 1, 4096, fp);
 		this->memwrite(iobuf, dst_paddr, 1, sz_read);
 		sz_write += sz_read;
 	}
@@ -1364,7 +1145,7 @@ _func_start:
 		while ( !feof(fp) && memleft > 0) {
 			fgets(readbuf + 2, 62, fp);
 			reinterpret_cast<unsigned int*>(membase)[i] =
-				endian_switch ? bl_endian_switch32(atof(readbuf)) : atof(readbuf);
+				endian_switch ? bl_endian_switch32(strtol(readbuf,nullptr,16)) : strtol(readbuf, nullptr, 16);
 			++i; --memleft;
 			ptrprev = ftell(fp);
 		}
@@ -1386,7 +1167,7 @@ _func_start:
 
 using namespace std;
 
-void Cpu_::ins_exec_d(CPUdebugger* debug)
+void Cpu_::ins_exec_d()
 {
 	int ecode;
 	unsigned int ins;
@@ -1429,7 +1210,6 @@ _funcstart:
 				}
 			}
 			else regs.pc += 4;
-			cycles++;
 		}
 	}
 	__except (iid = reinterpret_cast<unsigned long long>(GetExceptionInformation()), 
@@ -1445,7 +1225,7 @@ _funcstart:
 void Cpu_::ins_exec_with_jit()
 {
 	unsigned paddr = 0;
-	int res = call_my_fn(cache->read(regs.pc & 0x7fffffff), &regs);
+	auto res = call_my_fn(cache->read(regs.pc & 0x7fffffff), &regs);
 	switch (res)
 	{case 0:
 		break;
@@ -1457,39 +1237,65 @@ void Cpu_::ins_exec_with_jit()
 	case RC_RRT_SYSCALL:
 		break;
 	}
-	regs.pc += 4;
 }
 
 unsigned long Cpu_::runsync_with_jit()
 {
 	unsigned long long addr = 0;
-	int ecode;
+	unsigned long long ecode;
+	unsigned ix = -1;
 	__func_start:
 	__try {
 		while (debugflags.flag_run) {
 			if (Mode != MODE_MACHINE) { 
-				addr = memctrl.vaddr_to_paddr_exec_unsafe(addr, Mode);
+				addr = memctrl.vaddr_to_paddr_exec_unsafe(regs.pc, Mode);
 			}
 			else addr = regs.pc & 0x7fffffff;
+			if (addr & 3) {
+				ix = 0;
+			_make_exception(ix, *(unsigned*)(memctrl.memory.native_ptr() + (addr & memctrl.memory.mask())));
+			}
 			ecode = call_my_fn(cache->read_withoutHAJIfunction(regs.pc & 0x7fffffff), &regs);
-			switch (ecode) {
+			switch (ecode& 0x3fffff) {
 			case 0:
-				regs.pc += 4;
-				cycles++;
-				if (debugflags.flag_async && debugflags.one_step)_wait_for_signal_run();
+				if (debugflags.flag_async && (debugflags.sleep || debugflags.sleep_req)) _wait_for_signal_run();
 				continue;
 			case RC_RRT_INV_INSTRUCTION:
 				return 0;
 				break;
 			case RC_RRT_SYSCALL:
+				_ins_exec_op_system (*reinterpret_cast<Instruction*>(
+					memctrl.memory.native_ptr() + (addr& memctrl.memory.mask())));
 				break;
 			case RC_RRT_MEMLOAD:
+				addr = memctrl.read_unsafe(ecode>>32, ((ecode>>22) & 0b11100) |(Mode)&3);
+				if (addr & 0xffffffff) {
+					ix = addr & 0xffffffff;
+					--regs.cycles;
+					_make_exception(ix, ecode >> 32);
+				}
+				ix = GET_MEM_RW_RESULT_VAL(addr);
+				if ((ecode >> 22) & 3) {
+					if (((ecode >> 22) & 3) == 1)ix = _sign_ext<8>(ix);
+					else ix = _sign_ext<16>(ix);
+				}
+				if (((ecode >> 27) & 31) != 0)regs.x[(ecode >> 27) & 31] = ix;
+				ix = -1;
+				regs.pc += 4;
 				break;
 			case RC_RRT_MEMSTORE:
+				ix = memctrl.write_unsafe(ecode>>32, regs.x[((ecode >> 27) & 31)],
+					((ecode >> 22) & 0b11100) | (Mode) & 3);
+				if (ix == 0) ix = -1;
+				else { --regs.cycles; _make_exception(ix, ecode >> 32); }
+				regs.pc += 4;
 				break;
 			}
-			regs.pc += 4;
-			if (debugflags.flag_async && debugflags.one_step)_wait_for_signal_run();
+			if (ix != -1) {
+				_into_trap();
+				++regs.cycles;
+			}
+			if (debugflags.flag_async && (debugflags.sleep || debugflags.sleep_req))_wait_for_signal_run();
 		}
 	}
 	__except (addr = reinterpret_cast<unsigned long long>(GetExceptionInformation()),
@@ -1511,6 +1317,11 @@ void Cpu_::run_with_jit()
 	th.detach();
 }
 
+void Cpu_::set_flag_async()
+{
+	debugflags.flag_async = 1;
+}
+
 void Cpu_::_invoke()
 {
 	if (debugflags.flag_async&&debugflags.one_step) {
@@ -1525,6 +1336,49 @@ void Cpu_::_wait_for_signal_run()
 	if (thandle != nullptr)
 	{
 		tstste_sus = 1;
+		debugflags.pause = 1;
+		debugflags.sleep = 0;
+		debugflags.sleep_req = 0;
 		SuspendThread(thandle);
 	}
+}
+
+void Cpu_::runsync()
+{
+	int ecode;
+	unsigned int ins;
+	unsigned long long iid;
+_funcstart:
+	__try {
+		while (debugflags.flag_run) {
+			if (regs.pc & 3) {
+				ecode = EXC_INSTRUCTION_ADDR_NOT_ALIGNED;
+				goto _handle_exceptions;
+			}
+			iid = this->memctrl.read_ins_unsafe(regs.pc, Mode);
+			if (iid & 0xffffffff) {
+				ecode = iid & 0xffffffff;
+				goto _handle_exceptions;
+			}
+			ins = GET_MEM_RW_RESULT_VAL(iid);
+			ecode = (this->*_decodeheperfuncs[reinterpret_cast<Instruction*>(&ins)->rType.opcode])(
+				*reinterpret_cast<Instruction*>(&ins));
+		_handle_exceptions:
+			if (ecode != -1) {
+				_make_exception(ecode);
+				_into_trap();
+			}
+			else regs.pc += 4;
+			regs.cycles++;
+			if (debugflags.flag_async && debugflags.one_step) _wait_for_signal_run();
+		}
+	}
+	__except (iid = reinterpret_cast<unsigned long long>(GetExceptionInformation()),
+		GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+		VirtualAlloc(reinterpret_cast<void*>(
+			reinterpret_cast<_EXCEPTION_POINTERS*>(iid)->ExceptionRecord->ExceptionInformation[1] & 0xFFFFFFFFFFFFF000),
+			4096, MEM_COMMIT, PAGE_READWRITE);
+
+	}
+	if (debugflags.flag_run) goto _funcstart;
 }

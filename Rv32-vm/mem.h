@@ -51,6 +51,8 @@ public:
 	inline unsigned char* native_ptr() { return membase; }
 	inline unsigned int size() { return memsize; }
 	inline unsigned int mask() { return _mask;  }
+	myMem();
+	~myMem();
 };
 
 //Ò³±íÏî

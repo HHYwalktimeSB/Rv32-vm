@@ -5,6 +5,12 @@
 #include<string>
 #include"../jittools/jittool.h"
 
+#ifdef _DLL
+#define DLLEXPORTCLASS __declspec(dllexport)
+#else
+#define DLLEXPORTCLASS
+#endif
+
 
 #define RV32_
 #define MODE_USR 0
@@ -144,7 +150,8 @@ struct REGS
 {
 	unsigned int x[32];
 	unsigned int pc;//_128
-	int instruction_ecode;
+	int instruction_ecode;//132
+	unsigned long long cycles;
 };
 
 template <unsigned N>
@@ -285,6 +292,8 @@ public:
 	}
 };
 
+#include"../dev_tamplate_/_dev_impl.h"
+
 class MemController {
 public:
 	const static unsigned int mioflag_read = 16;
@@ -295,10 +304,14 @@ private:
 	unsigned char* membase;
 	unsigned int mem_mask;
 public:
+	constexpr static unsigned int _DEV_lower_allocsz = 16;
+	constexpr static unsigned int _DEV_upper_allocsz = 4;
 	typedef int (* dev_writeift) (unsigned , unsigned,unsigned);
 	typedef int (*dev_readift) (unsigned, unsigned*);
 	unsigned int* cpuCSRs;
 	myMem memory;
+	_DevBase* loweraddrdevs[_DEV_lower_allocsz];
+	_DevBase* upperaddrdev[_DEV_upper_allocsz];//each allocated 0x10000000 bytes addr;
 	unsigned long long read_ins(unsigned int addr, unsigned int mode);
 	unsigned long long vaddr_to_paddr(unsigned int addr, int io_flag) ;//assume can access
 	unsigned long long read32(unsigned int addr, unsigned int mode);
@@ -314,21 +327,20 @@ public:
 	unsigned long long read_unsafe(unsigned int addr, unsigned int mode_and_iosz);
 	unsigned int write_unsafe(unsigned int addr, unsigned int val, unsigned int mode_and_iosz);
 	unsigned long long read_ins_unsafe(unsigned int addr, unsigned int Mode);
+	~MemController();
 };
 
-class CPUdebugger;
-
-class Cpu_
+class DLLEXPORTCLASS Cpu_
 {
 public:
-	void Invoke_int();//reserved
+	//void Invoke_int();//reserved
 
 private:
 	int _ins_exec_op_alu(Instruction ins);
 	static decltype(&Cpu_::_ins_exec_op_alu) _decodeheperfuncs[128];
 	MambaCache_* cache;
 	REGS regs;
-	unsigned int Mode;
+	int Mode;
 	struct mycpuwalktimeflags
 	{
 		unsigned int one_step : 1;
@@ -338,20 +350,19 @@ private:
 		unsigned int flag_int : 1;
 		unsigned int eflag : 1;
 		unsigned int flag_async : 1;
-		unsigned int reserved : 25;
+		unsigned int sleep : 1;
+		unsigned int sleep_req : 1;
+		unsigned int reserved : 23;
 	};
 	mycpuwalktimeflags debugflags;
-	tagCSR::tagmcause exeption;
 	MemController memctrl;
-	unsigned int CSRs[4096];
+	unsigned int *CSRs;
 	void* thandle;
 	void* shandle;
-	unsigned long cycles;
 	int tstste_sus;
 	bool _csr_readable(int csrid);
 	bool _csr_writeable(int csrid);
 	static unsigned int ALUoperation(unsigned int a, unsigned int b, Instruction ins);
-	void ins_exec(Instruction ins);
 	void _into_trap();
 	void _into_int();//TODO
 	void _make_exception(int code,unsigned int mtval);//set mepc = pc;
@@ -368,11 +379,10 @@ private:
 	int _ins_exec_op_lui(Instruction ins);
 	int _ins_exec_op_auipc(Instruction ins);
 	int _ins_exec_op_unknown(Instruction ins);
-	static void _init_ftable();
-	void ins_exec_d(CPUdebugger*);
+	void ins_exec_d();
 	void ins_exec_with_jit();//only support machine mod;
-	void exception_handler_unsafe(int ecode);
 public:
+	static void _init_ftable();
 	unsigned long runsync_with_jit();
 	void _init();//TODO
 	void runsync();
@@ -380,6 +390,7 @@ public:
 	void set_flag_async();
 	void _invoke();
 	Cpu_(unsigned int mem_sz = 0x2000000);
+	~Cpu_();
 	friend class CPUdebugger;
 };
 
@@ -389,7 +400,7 @@ struct _cpustate {
 	char* addinfo_2;
 };
 
-class CPUdebugger {
+class DLLEXPORTCLASS CPUdebugger {
 public:
 	enum runtimeMode{
 	sync, async};
@@ -407,12 +418,6 @@ public:
 
 	void quick_setup(unsigned int memsize);
 
-	//单步执行，忽视中断和异常的处理，返回值：EXC_...等异常代码，在读指令出错时抛出异常
-	int run_1_cycle();
-
-	//暂时不做
-
-	void runsync();
 
 	void setpc(unsigned int val);
 	void setreg(unsigned int id, int val);

@@ -15,25 +15,22 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="mem.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="_cpu.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="test.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
+    <ClInclude Include="framework.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="_dev_impl.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="mem.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="_cpu.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="RVVM32.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
+    <ClCompile Include="pch.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="_dev_impl.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

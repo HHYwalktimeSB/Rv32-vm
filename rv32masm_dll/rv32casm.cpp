@@ -227,7 +227,7 @@ std::string get_para(const string& str, unsigned int& iptr) {
     while (iptr < str.length() && str[iptr] == ' ')++iptr;
     if (iptr >= str.length())throw str_no_para;
     string ret;
-    while (iptr < str.length() && str[iptr] != ' ' && str[iptr] != ',')
+    while (iptr < str.length() && str[iptr] != ' ' && str[iptr] != ','&& str[iptr]!='[')
     {
         ret.push_back(str[iptr]);
         ++iptr;

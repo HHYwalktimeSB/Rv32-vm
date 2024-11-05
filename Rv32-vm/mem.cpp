@@ -91,3 +91,19 @@ void myMem::_writep32(unsigned int _addr, unsigned int val)
 		*reinterpret_cast<unsigned int*>(membase + (_addr & _mask)) = val;
 	}
 }
+
+myMem::myMem()
+{
+	this->cbdata = 0;
+	this->membase = 0;
+	this->memsize = 0;
+	this->_invoke_int = 0;
+	this->_mask = 0;
+}
+
+myMem::~myMem()
+{
+	if (memsize > 0 && membase != NULL) {
+		VirtualFree(membase, 0, MEM_RELEASE);
+	}
+}

@@ -7,125 +7,7 @@
 #define Make2(_v1_eqe,_v2_eqe) {Hex(_v1_eqe),Hex(_v2_eqe)}
 #define Make3(_v1_eqe,_v2_eqe, _v3_eqe) {Hex(_v1_eqe),Hex(_v2_eqe),Hex(_v3_eqe)}
 #define PC_INC(_BUF_) write_buf(_BUF_, {Hex(83),Hex(83), Hex(80), Hex(0),Hex(0),Hex(0),Hex(4)})
-
-__declspec(naked) void __fastcall fn_template_Add(REGS* ptr) {
-    __asm {
-        mov rbx, rcx
-        mov eax, [rbx]
-        add eax, [rbx + 124]
-        mov[rbx + 0x7c], eax
-        ret
-    };
-}
-
-//static sign_extend
-__declspec(naked) void __fastcall fn_template_AddI(REGS* ptr) {
-    __asm {
-        mov rbx, rcx
-        sete cl
-        setne cl
-        setge cl
-        setl cl
-        setae cl
-        setb cl
-        shl cl, 5
-        shl eax, cl
-        add [rbx+128], eax
-        mov eax, [rbx + 128]
-        mov [rbx + 128 ], eax
-        add eax, 0xfffffB5A
-        mov cl,  32
-        or eax, 0xfffffB5A
-        xor eax, 0xfffffB5A
-        and eax, 0xfffffB5A
-        cmp eax, 0xfffffB5A
-        mov[rbx + 8], eax
-        ret
-    };
-}
-
-__declspec(naked) void __fastcall fn_template_Slt(REGS* ptr) {
-    __asm {
-        mov rbx, rcx
-        mov eax, [rbx]
-        cmp eax, [rbx + 124]
-        mov eax, 0
-        setl al
-        setb al
-        cmp eax, [rbx]
-        mov[rbx + 8], eax
-        ret
-    };
-}
-
-__declspec(naked) void __fastcall fn_template_sll(REGS* ptr) {
-    __asm {
-        mov rbx, rcx
-        mov eax, [rbx + 124]
-        mov ecx, [rbx + 4];
-        shl eax, cl
-        shr eax, cl
-        sar eax, cl
-        mov[rbx + 8], eax
-        ret
-    };
-}
-
-__declspec(naked)
-int __fastcall fuck_memload(void* ptr, void* cccc) {
-    __asm {
-        mov rsp, rdx
-        mov rcx, [rsp+0x38]
-        xor rcx,rsp
-        call __security_check_cookie
-        add rsp, 0x40
-        mov eax, 1
-        pop rbx
-        ret
-    }
-}
-
-__declspec(naked)
-int __fastcall fuck_memstore(void* ptr, void* cccc) {
-    __asm {
-        mov rsp, rdx
-        mov rcx, [rsp + 0x38]
-        xor rcx, rsp
-        call __security_check_cookie
-        add rsp, 0x40
-        mov eax, 2
-        pop rbx
-        ret
-    }
-}
-
-__declspec(naked)
-int __fastcall fuck_syscall(void* ptr, void* cccc) {
-    __asm {
-        mov rsp, rdx
-        mov rcx, [rsp + 0x38]
-        xor rcx, rsp
-        call __security_check_cookie
-        add rsp, 0x40
-        mov eax, 3
-        pop rbx
-        ret
-    }
-}
-
-__declspec(naked)
-int __fastcall fuck_invins(void* ptr, void* cccc) {
-    __asm {
-        mov rsp, rdx
-        mov rcx, [rsp + 0x38]
-        xor rcx, rsp
-        call __security_check_cookie
-        add rsp, 0x40
-        mov eax, 4
-        pop rbx
-        ret
-    }
-}
+#define INC_CYCLES(_BUF_) buf = write_buf(_BUF_, {Hex(48),Hex(ff), Hex(83), Hex(88),Hex(0),Hex(0),Hex(0)})
 
 template<unsigned N>
 inline char* __fastcall write_buf(char* buf, const char (&data)[N] ) {
@@ -226,6 +108,7 @@ inline char* make_alu_instruction(char* buf , Instruction ins) {
     }
     func_end_epilog:
     buf = PC_INC(buf);
+    INC_CYCLES(buf);
     return buf;
 }
 
@@ -313,6 +196,7 @@ inline char* make_alu_instruction_imm(char* buf, Instruction ins) {
     }
 func_end_epilog:
     buf = PC_INC(buf);
+    INC_CYCLES(buf);
     return buf;
 }
 
@@ -351,6 +235,7 @@ char* make_btype_ins(char* buf, Instruction ins) {
         break;
     case 2:
     case 3:
+        buf = add_epilog_(buf, RC_RRT_INV_INSTRUCTION);
         break;
     case 5://bge
         buf = write_buf(buf, Make3(0f, 9c, c1));//setl
@@ -368,6 +253,7 @@ char* make_btype_ins(char* buf, Instruction ins) {
     *buf = Hex(b8), ++buf; buf = write_buf(buf, imm);// MOV EAX, imm
     buf = write_buf(buf, {Hex(c0),Hex(e1),Hex(05)       ,Hex(48), Hex(d3),Hex(e0),       Hex(83), Hex(C0), Hex(04),     
         Hex(01), Hex(83), Hex(80) , Hex(0),Hex(0), Hex(0)});//shl cl,5; shl rax cl; add eax, 4; add [rbx+80], eax;
+    INC_CYCLES(buf);
     buf = add_epilog_(buf, 0);
     return buf;
 }
@@ -377,19 +263,19 @@ char* make_btype_ins(char* buf, Instruction ins) {
 #define ADD_EAX_IMM(_IMM_fuck) *buf = Hex(05), ++buf;\
 buf = write_buf(buf, _IMM_fuck)
 
-MY_API int __fastcall call_my_fn(const void* pfn, void* preg)
+__declspec(dllexport) unsigned long long __fastcall call_my_fn(const void* pfn, void* preg)
 {
-    int ret;
+    unsigned long long ret;
     __asm {
         mov rbx, preg
         mov rdx, rsp
         call pfn
-        mov ret, eax
+        mov ret, rax
     }
     return ret;
 }
 
-MY_API unsigned c_instruction(unsigned int eeeeins, char* buf, unsigned &rrc)
+MY_API unsigned c_instruction(unsigned int eeeeins, char* buf)
 {
     char* be = buf;
     Instruction ins;
@@ -404,6 +290,7 @@ MY_API unsigned c_instruction(unsigned int eeeeins, char* buf, unsigned &rrc)
         *buf = Hex(b8), ++buf; buf = write_buf(buf, (char*)&eeeeins, 4);// MOV EAX, ...
         if (ins.rType.rd != 0)buf = write_buf(buf, Make2(89, 43)), * buf = (ins.rType.rd << 2), ++buf;
         buf = PC_INC(buf);
+        INC_CYCLES(buf);
         break;
     case OP_AUIPC:
 #ifndef ARG_PASS_BY_RBX
@@ -416,6 +303,7 @@ MY_API unsigned c_instruction(unsigned int eeeeins, char* buf, unsigned &rrc)
         buf = write_buf(buf, eeeeins);
         if (ins.rType.rd != 0)buf = write_buf(buf, Make2(89, 43)), * buf = (ins.rType.rd << 2), ++buf;
         buf = PC_INC(buf);
+        INC_CYCLES(buf);
         break;
     case OP_JAL:
 #ifndef ARG_PASS_BY_RBX
@@ -431,6 +319,7 @@ MY_API unsigned c_instruction(unsigned int eeeeins, char* buf, unsigned &rrc)
         eeeeins -= 4;
         if (eeeeins != 0)ADD_EAX_IMM(eeeeins);
         STORE_EAX_PTR_OFF_L(128);
+        INC_CYCLES(buf);
         buf = add_epilog_(buf, 0);
         break;
     case OP_JALR:
@@ -446,6 +335,7 @@ MY_API unsigned c_instruction(unsigned int eeeeins, char* buf, unsigned &rrc)
         eeeeins = _sign_ext<12>(ins.iType.imm) - 4;
         if(eeeeins !=0)ADD_EAX_IMM(eeeeins);
         STORE_EAX_PTR_OFF_L(128);
+        INC_CYCLES(buf);
         buf = add_epilog_(buf, 0);
         break;
     case OP_BTYPE:
@@ -458,15 +348,80 @@ MY_API unsigned c_instruction(unsigned int eeeeins, char* buf, unsigned &rrc)
         buf = make_alu_instruction_imm(buf, ins);
         break;
     case OP_STORE:
-        buf = add_epilog_(buf, 2);
+        if (ins.rType.rs1 == 0)buf = write_buf(buf, Make2(8b, 03));
+        else buf = write_buf(buf, Make2(8b, 43)), * buf = (unsigned char)(ins.rType.rs1 << 2), ++buf;
+        eeeeins = ((unsigned)ins.sType.imm_4_0); eeeeins |= ((unsigned)ins.sType.imm_11_5) << 5;
+        eeeeins = _sign_ext<12>(eeeeins);
+        if (eeeeins != 0) {
+            *buf = (char)0x05; ++buf;
+            buf = write_buf(buf, eeeeins);
+        }
+        *buf = (char)0xb9; ++buf;
+        eeeeins = ins.sType.rs2; eeeeins <<= 27; eeeeins |= 2;
+        switch (ins.rType.funct3)
+        {
+        case 0:
+            eeeeins |= (0x1u << 24);
+            break;
+        case 1:
+            eeeeins |= (2u << 24);
+            break;
+        case 2:
+            eeeeins |= (4u << 24);
+            break;
+        default:
+            buf = add_epilog_(buf, RC_RRT_INV_INSTRUCTION);
+            break;
+        }
+        buf = write_buf(buf, eeeeins);
+        //buf = PC_INC(buf);
+        buf = write_buf(buf, { Hex(48), Hex(c1),Hex(e0),Hex(20) });
+        buf = write_buf(buf, Make3(48, 09, c8));
+        INC_CYCLES(buf);
+        *buf = (char)0xc3; ++buf;
         break;
     case OP_SYSTEM:
-        buf = add_epilog_(buf, 2);
-        //rrc = 3;
+        buf = add_epilog_(buf, 3);
         break;
     case OP_LOAD:
-        buf = add_epilog_(buf, 1);
-        rrc = 1;
+        if (ins.rType.rs1 == 0)buf = write_buf(buf, Make2(8b, 03));
+        else buf = write_buf(buf, Make2(8b, 43)), * buf = (unsigned char)(ins.rType.rs1 << 2), ++buf;
+        eeeeins = _sign_ext<12>(ins.iType.imm);
+        if (eeeeins != 0) {
+            buf[0] = (char)0x05; ++buf;
+            buf = write_buf(buf, eeeeins);
+        }
+        buf = write_buf(buf, { Hex(48), Hex(c1),Hex(e0),Hex(20) });
+        buf[0] = (char)0xb9; ++buf;
+        eeeeins = ins.rType.rd; eeeeins <<= 27; eeeeins |= 1;
+        switch (ins.rType.funct3)
+        {
+        case 0:
+            eeeeins |= (0x1u << 24);
+            eeeeins |= (1 << 22);
+            break;
+        case 1:
+            eeeeins |= (2u << 24);
+            eeeeins |= (2 << 22);
+            break;
+        case 2:
+            eeeeins |= (4u << 24);
+            break;
+        case 4:
+            eeeeins |= (1u << 24);
+            break;
+        case 5:
+            eeeeins |= (2u << 24);
+            break;
+        default:
+            buf = add_epilog_(buf, RC_RRT_INV_INSTRUCTION);
+            break;
+        }
+        buf = write_buf(buf, eeeeins);
+        //buf = PC_INC(buf);
+        buf = write_buf(buf, Make3(48, 09, c8));
+        INC_CYCLES(buf);
+        buf[0] = (char)0xc3; ++buf;
         break;
     default:
         buf = add_epilog_(buf, 4);
@@ -474,30 +429,6 @@ MY_API unsigned c_instruction(unsigned int eeeeins, char* buf, unsigned &rrc)
         break;
     }
     return buf - be;
-}
-
-MY_API const void* _getfptr001(int rc)
-{
-    const void* p;
-    switch (rc)
-    {
-    case RC_RRT_SYSCALL:
-        p = (const void*) & fuck_syscall;
-        break;
-    case RC_RRT_MEMLOAD:
-        p = (const void*)&fuck_memload;
-        break;
-    case RC_RRT_MEMSTORE:
-        p = (const void*)&fuck_memstore;
-        break;
-    case 4:
-        p = (const void*)&fuck_invins;
-        break;
-    default:
-        p = 0;
-        break;
-    }
-    return p;
 }
 
 int MambaCache_::getHeight(Node* n)
@@ -598,7 +529,7 @@ MambaCache_::Node* __fastcall MambaCache_::find(int key, Node* cur)
 void MambaEntry_::construct_buf()
 {
     buf = (char*)VirtualAlloc(NULL, mambaEXEbuf_reserved_SZ, MEM_RESERVE | MEM_COMMIT,
-        PAGE_EXECUTE_READWRITE);
+        PAGE_READONLY);
 }
 
 void MambaEntry_::deconstruct_buf()
@@ -611,13 +542,14 @@ void MambaEntry_::compile_1(unsigned* pmem, unsigned addr)
     addr >>= 6;
     addr &= 3;
     char* ins_stat = buf + mambaEXEbuf_reserved_SZ / 4 * addr;
-    unsigned rrc = 0;
     unsigned i = 0;
-    func_start:
+    DWORD cr;
+    VirtualProtect(buf, mambaEXEbuf_reserved_SZ, PAGE_READWRITE, &cr);
+func_start:
     __try {
         for (; i < mambaCACHELINE_SZ / 4; ++i) {
-            fptr[addr][i] = ins_stat;
-            ins_stat += c_instruction(pmem[i], ins_stat, rrc);
+            fptr[i + addr*16] = ins_stat;
+            ins_stat += c_instruction(pmem[i], ins_stat);
         }
         add_epilog_(ins_stat, 0);
         this->description[addr].V = 1;
@@ -628,6 +560,7 @@ void MambaEntry_::compile_1(unsigned* pmem, unsigned addr)
             4096, MEM_COMMIT, PAGE_READWRITE);
     }
     if (i != 16)goto func_start;
+    VirtualProtect(buf, mambaEXEbuf_reserved_SZ, PAGE_EXECUTE, &cr);
 }
 
 const void* __fastcall MambaEntry_::read(unsigned addr)
@@ -635,7 +568,7 @@ const void* __fastcall MambaEntry_::read(unsigned addr)
     addr >>= 2;
     if (description[(addr >> 4) & 3].V == 0) compile_1(binding_pmeml,  addr<<2);
     description[(addr >> 4) & 3].C += 1;
-    return fptr[(addr >> 4) & 3][addr & 15];
+    return fptr[(addr & 15) + ((addr >> 4) & 3)*16];
 }
 
 void MambaEntry_::flush()
@@ -659,9 +592,10 @@ unsigned MambaEntry_::cnt_all() const
     return r;
 }
 
-void MambaEntry_::bind(unsigned* pmem)
+void MambaEntry_::bind(unsigned* pmem, unsigned ma)
 {
     binding_pmeml = pmem;
+    mem_mask = ma;
 }
 
 MambaEntry_::MambaEntry_()
@@ -672,13 +606,13 @@ MambaEntry_::MambaEntry_()
     construct_buf();
 }
 
-MambaEntry_::MambaEntry_(unsigned* base_ptr)
+MambaEntry_::MambaEntry_(unsigned* base_ptr, unsigned ma)
 {
     for (unsigned i = 0; i < 4; ++i) {
         description[i].V = 0;
     }
     construct_buf();
-    bind(base_ptr);
+    bind(base_ptr, ma);
 }
 
 MambaEntry_::~MambaEntry_()
@@ -825,11 +759,11 @@ void MambaCache_::add(unsigned addr, unsigned index)
     if (table[index]&& cnt_nds[index] == 7) {
         auto m = mambaout(index);
         m->flush();
-        m->bind((unsigned*)(base + addr));
+        m->bind((unsigned*)(base + addr),mam_mask);
         table[index] = insert(table[index], addr, m);
     }
     else {
-        table[index] = insert(table[index], addr, new MambaEntry_((unsigned*)(base + addr)));
+        table[index] = insert(table[index], addr, new MambaEntry_((unsigned*)(base + addr),mam_mask));
         cnt_nds[index] += 1;
     }
 }
@@ -846,9 +780,10 @@ const void* MambaCache_::read(unsigned addr)
     return find(addr & 0xffffff00, table[i])->data->read(addr);
 }
 
-MambaCache_::MambaCache_(char* base) {
+MambaCache_::MambaCache_(char* base, unsigned ma) {
     for (unsigned i = 0; i < 512; ++i)table[i] = nullptr;
     bind(base);
+    this->mam_mask = ma;
 }
 
 const void* MambaCache_::read_withoutHAJIfunction(unsigned addr)
@@ -858,19 +793,17 @@ const void* MambaCache_::read_withoutHAJIfunction(unsigned addr)
     if (x == nullptr)add(addr, i), x = find(addr & 0xffffff00, table[i]);
     i = (addr >> 6) & 3;
     if (x->data->description[i].V == 0)x->data->compile_1((unsigned*)(base + (addr & 0xffffffc0)), addr & 0xffffffc0);
-    return x->data->fptr[i][(addr>>2)&15];
+    return x->data->fptr[((addr>>2)&15) + i*16];
 }
 
 __declspec(naked) void __fastcall ddddd(void* p) {
     __asm {
-        add dword ptr[rbx + 124], 2047
-        xor dword ptr[rbx + 4], 2047
-        and dword ptr[rbx + 124], 2047
-        or dword ptr[rbx + 4], 2047
-        add dword ptr [rbx + 10], eax
-        xor dword ptr[rbx + 10],eax
-        and dword ptr[rbx + 10], eax
-        or dword ptr[rbx + 10], eax
+
+        add eax, 2047
+        shl rax, 32
+        mov ecx, 0xf8300001
+        or rax, rcx
+        inc qword ptr[rbx+136]
         ret
     }
 }
@@ -879,7 +812,8 @@ MY_API void call_test_fn() {
     REGS reg { 0 };
     reg.x[1] = 5;
     reg.x[2] = 1;
-    ddddd(&reg);
-    reg.pc = 11;
+    auto x = call_my_fn(&ddddd, &reg);
+    x >>= 32;
+    reg.pc += x;
     return;
 }

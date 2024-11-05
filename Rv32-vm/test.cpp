@@ -1,27 +1,20 @@
 #include "_cpu.h"
+#include<Windows.h>
 
-#include<stdio.h>
-#include<stdlib.h>
-#include<iostream>
-#include<string.h>
-#include<iomanip>
+extern MyVm* localvm;
 
-using namespace std;
-
-char buf[8192];
-
-int main() {
-	CPUdebugger debug;
-	debug.quick_setup(1024 * 1024 * 4);//4m
-	std::string str;
-	cin >> str;
-	//add your codes bellow
-
-	//example of modify memory
-	debug.loadmem_fromhexfile(str.c_str(), 0x80000000);
-	debug.setpc(0x80000000);
-	debug.simple_run();
-
-	//system("pause");
-	return 0;
-}	
+BOOL APIENTRY DllMain(HMODULE hModule,
+    DWORD  ul_reason_for_call,
+    LPVOID lpReserved
+)
+{
+    switch (ul_reason_for_call)
+    {
+    case DLL_PROCESS_ATTACH:
+    case DLL_THREAD_ATTACH:
+    case DLL_THREAD_DETACH:
+    case DLL_PROCESS_DETACH:
+        break;
+    }
+    return TRUE;
+}
