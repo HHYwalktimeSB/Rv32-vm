@@ -1,7 +1,5 @@
-#include "_cpu.h"
+#include "RVVM32.h"
 #include<Windows.h>
-
-extern MyVm* localvm;
 
 BOOL APIENTRY DllMain(HMODULE hModule,
     DWORD  ul_reason_for_call,

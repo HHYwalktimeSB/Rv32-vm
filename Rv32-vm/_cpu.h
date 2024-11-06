@@ -3,7 +3,11 @@
 #include "mem.h"
 #include<iostream>
 #include<string>
+#define _JITTOOLS_ENABLED
+
+#ifdef _JITTOOLS_ENABLED
 #include"../jittools/jittool.h"
+#endif
 
 #ifdef _DLL
 #define DLLEXPORTCLASS __declspec(dllexport)
@@ -294,13 +298,13 @@ public:
 
 #include"../dev_tamplate_/_dev_impl.h"
 
-class MemController {
+class DLLEXPORTCLASS MemController {
 public:
 	const static unsigned int mioflag_read = 16;
 	const static unsigned int mioflag_write = 32;
 	const static unsigned int mioflag_mask = 17;
 private:
-	unsigned long long shared_io_interfence(unsigned int addr, unsigned int ioinfo, ... );
+	unsigned long shared_io_interfence(unsigned int addr, unsigned int ioinfo, ... );
 	unsigned char* membase;
 	unsigned int mem_mask;
 public:
@@ -338,7 +342,9 @@ public:
 private:
 	int _ins_exec_op_alu(Instruction ins);
 	static decltype(&Cpu_::_ins_exec_op_alu) _decodeheperfuncs[128];
+#ifdef _JITTOOLS_ENABLED
 	MambaCache_* cache;
+#endif // _JITTOOLS_ENABLED
 	REGS regs;
 	int Mode;
 	struct mycpuwalktimeflags
@@ -379,14 +385,15 @@ private:
 	int _ins_exec_op_lui(Instruction ins);
 	int _ins_exec_op_auipc(Instruction ins);
 	int _ins_exec_op_unknown(Instruction ins);
-	void ins_exec_d();
 	void ins_exec_with_jit();//only support machine mod;
 public:
 	static void _init_ftable();
+#ifdef _JITTOOLS_ENABLED
 	unsigned long runsync_with_jit();
+	void run_with_jit();
+#endif // _JITTOOLS_ENABLED
 	void _init();//TODO
 	void runsync();
-	void run_with_jit();
 	void set_flag_async();
 	void _invoke();
 	Cpu_(unsigned int mem_sz = 0x2000000);
@@ -428,6 +435,8 @@ public:
 	// compare prev state & cur state 
 	int cmpcpustate(const _cpustate* prevstate);
 
+	void reset_cpu_regs();
+
 	//写入内存, 源，目的地址，单个数据大小，写入数据计数，是否转换大小端(默认关闭)
 	void memwrite(const char* src, unsigned int dst_paddr,
 		unsigned element_sz, unsigned element_cnt, bool endian_switch = false);
@@ -439,6 +448,8 @@ public:
 	//从文件中加载内存值（二进制文件）
 	unsigned int loadmem_fromfile(const char* filename, unsigned int dst_paddr);
 	unsigned int loadmem_fromhexfile(const char* filename, unsigned int dst_paddr, bool endian_switch = false);
+
+	unsigned int storemem_tohexfile(const char* filename, unsigned addr, unsigned size);
 };
 
 #endif

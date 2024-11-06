@@ -17,7 +17,6 @@ void Cpu_::_init()
 	Mode = MODE_MACHINE;
 	regs.instruction_ecode = -1;
 	//regs.csrs = CSRs;
-	if(!cache)cache = new MambaCache_((char*)memctrl.memory.native_ptr(), memctrl.memory.mask());
 	*reinterpret_cast<unsigned int*>( &debugflags) = 0;
 	debugflags.flag_run = 1;
 	debugflags.one_step = 0;
@@ -424,6 +423,9 @@ Cpu_::Cpu_(unsigned int mem_sz):memctrl(mem_sz, this->CSRs)
 	shandle = nullptr;
 	tstste_sus = 0;
 	CSRs = new unsigned[4096];
+#ifdef _JITTOOLS_ENABLED
+	cache = new MambaCache_((char*)memctrl.memory.native_ptr(), memctrl.memory.mask());
+#endif // _JITTOOLS_ENABLED
 }
 
 Cpu_::~Cpu_()
@@ -472,26 +474,31 @@ unsigned int __fastcall chk_can_rw_(unsigned int pe, int io_flag) {
 	return 0;
 }
 
-unsigned long long MemController::shared_io_interfence(unsigned int addr, unsigned int ioinfo, ...)
+#include<stdarg.h>
+
+unsigned long MemController::shared_io_interfence(unsigned int addr, unsigned int ioinfo, ...)
 {
-	unsigned long long r;
+	unsigned long long r = 0;
 	_DevBase* dev;
 	if (addr < 0x40000000) {
 		r = (addr & 0x70000000) / (0x40000000 / _DEV_lower_allocsz);
 		dev = loweraddrdevs[(unsigned short)r];
-		if (dev == nullptr)return 0;
+		addr -= r * (0x40000000 / _DEV_lower_allocsz);
 	}
 	else {
 		r = (addr & 0x70000000) / (0x40000000 / _DEV_upper_allocsz);
 		dev = upperaddrdev[(unsigned short)r];
-		if (dev == nullptr)return 0;
+		addr -= r * (0x40000000 / _DEV_upper_allocsz);
 	}
+	if (dev == nullptr)return 0;
 	if (mioflag_read & ioinfo) {
-
+		r = dev->read(addr, ioinfo & 7);
 	}
 	else {
-
+		va_list ap; va_start(ap, ioinfo);
+		dev->write(addr, va_arg(ap, unsigned), ioinfo & 7);
 	}
+	return r;
 }
 
 unsigned long long MemController::read_ins(unsigned int addr, unsigned int mode)
@@ -629,7 +636,7 @@ unsigned int MemController::write16(unsigned int addr, unsigned short val, unsig
 	else {
 		if (addr & 0x80000000)
 			memory._writep16(addr & 0x7fffffff, val);
-		else shared_io_interfence(addr, mioflag_write | 2, val);
+		else shared_io_interfence(addr, mioflag_write | 2, (unsigned int)val);
 	}
 	return MEME_OK;
 }
@@ -645,7 +652,7 @@ unsigned int MemController::write8(unsigned int addr, unsigned char val, unsigne
 	else {
 		if (addr & 0x80000000)
 			memory._writep8(addr & 0x7fffffff, val);
-		else shared_io_interfence(addr, mioflag_write | 1, val);
+		else shared_io_interfence(addr, mioflag_write | 1, (unsigned)val);
 	}
 	return MEME_OK;
 }
@@ -656,6 +663,8 @@ MemController::MemController(unsigned memsz, unsigned int* csr)
 	cpuCSRs = csr;	
 	membase = memory.native_ptr();
 	mem_mask = memory.mask();
+	for (unsigned i = 0; i < _DEV_lower_allocsz; ++i) loweraddrdevs[i] = nullptr;
+	for (unsigned i = 0; i < _DEV_upper_allocsz; ++i) upperaddrdev[i] = nullptr;
 }
 
 inline unsigned long long MemController::vaddr_to_paddr_read_unsafe(unsigned int addr, unsigned int mode)
@@ -956,6 +965,13 @@ int CPUdebugger::cmpcpustate(const _cpustate* prevstate)
 	return detect;
 }
 
+void CPUdebugger::reset_cpu_regs()
+{
+	pcpu->regs.pc = 0;
+	pcpu->regs.cycles = 0;
+	for (unsigned i = 0; i < 32; ++i)pcpu->regs.x[i] = 0;
+}
+
 #include<Windows.h>
 #include<fstream>
 #include<stdio.h>
@@ -993,9 +1009,6 @@ void CPUdebugger::simple_run()
 	setpc(0x80000000);
 	pcpu->regs.x[1] = 0;
 	s = clock();
-	pcpu->ins_exec_d(this);
-	s = clock() - s;
-	std::cout << "no jitv2: " << s << "\ncycles: " << pcpu->regs.x[1] << std::endl;
 }
 
 void CPUdebugger::quick_setup(unsigned int memsize)
@@ -1013,8 +1026,10 @@ void CPUdebugger::memwrite(const char* src, unsigned int dst_paddr, unsigned ele
 	unsigned int i = 0;
 	unsigned char* membase = this->pcpu->memctrl.memory.native_ptr();
 	membase += dst_paddr;
+#ifdef VMMEM_RESERVE_THEN_COMMIT
 _func_start:
 	__try {
+#endif // VMMEM_RESERVE_THEN_COMMIT
 		switch (element_sz)
 		{
 		case 1:
@@ -1041,6 +1056,7 @@ _func_start:
 		default:
 			return;
 		}
+#ifdef VMMEM_RESERVE_THEN_COMMIT
 	}
 	__except ((GetExceptionCode()==EXCEPTION_ACCESS_VIOLATION&& prev_excptionaddr!=membase
 		)? EXCEPTION_EXECUTE_HANDLER:
@@ -1051,6 +1067,7 @@ _func_start:
 			4096, MEM_COMMIT, PAGE_READWRITE);
 	}
 	if (i < element_cnt)goto _func_start;
+#endif // VMMEM_RESERVE_THEN_COMMIT
 }
 
 void CPUdebugger::readmem(unsigned int src_paddr, char* dst, unsigned element_sz, unsigned element_cnt, bool endian_switch)
@@ -1061,8 +1078,10 @@ void CPUdebugger::readmem(unsigned int src_paddr, char* dst, unsigned element_sz
 	unsigned int i = 0;
 	unsigned char* membase = this->pcpu->memctrl.memory.native_ptr();
 	membase += src_paddr;
+#ifdef VMMEM_RESERVE_THEN_COMMIT
 _func_start:
 	__try {
+#endif // VMMEM_RESERVE_THEN_COMMIT
 		switch (element_sz)
 		{
 		case 1:
@@ -1089,6 +1108,7 @@ _func_start:
 		default:
 			return;
 		}
+#ifdef VMMEM_RESERVE_THEN_COMMIT
 	}
 	__except ((GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION && 
 		prev_excptionaddr != membase) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
@@ -1098,6 +1118,7 @@ _func_start:
 			4096, MEM_COMMIT, PAGE_READWRITE);
 	}
 	if (i < element_cnt)goto _func_start;
+#endif // VMMEM_RESERVE_THEN_COMMIT
 }
 
 unsigned int CPUdebugger::getCSR(CSRid id)
@@ -1140,8 +1161,10 @@ unsigned int CPUdebugger::loadmem_fromhexfile(const char* filename, unsigned int
 	fopen_s(&fp, filename, "r");
 	if (!fp)return 0;
 	long ptrprev = ftell(fp);
+#ifdef VMMEM_RESERVE_THEN_COMMIT
 _func_start:
 	__try {
+#endif // VMMEM_RESERVE_THEN_COMMIT
 		while ( !feof(fp) && memleft > 0) {
 			fgets(readbuf + 2, 62, fp);
 			reinterpret_cast<unsigned int*>(membase)[i] =
@@ -1149,6 +1172,7 @@ _func_start:
 			++i; --memleft;
 			ptrprev = ftell(fp);
 		}
+#ifdef VMMEM_RESERVE_THEN_COMMIT
 	}
 	__except ((GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION &&
 		prev_excptionaddr != membase) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
@@ -1160,67 +1184,48 @@ _func_start:
 			4096, MEM_COMMIT, PAGE_READWRITE);
 	}
 	if (memleft > 0 && !feof(fp)) goto _func_start;
+#endif // VMMEM_RESERVE_THEN_COMMIT
 	return i * 4;
+}
+
+unsigned int CPUdebugger::storemem_tohexfile(const char* filename, unsigned addr,unsigned size)
+{
+	addr &= 0x7fffffff;
+	int i = 0;
+	unsigned int memleft = this->pcpu->memctrl.memory.size() - addr;
+	unsigned char* membase = this->pcpu->memctrl.memory.native_ptr();
+	unsigned char* prev_excptionaddr = nullptr;
+	FILE* fp;
+	unsigned val;
+	fopen_s(&fp, filename, "w");
+	if (!fp)return -1;
+#ifdef VMMEM_RESERVE_THEN_COMMIT
+	_func_start :
+	__try {
+#endif // VMMEM_RESERVE_THEN_COMMIT
+		while (size > 0) {
+			val = reinterpret_cast<unsigned int*>(membase)[i];
+			fprintf(fp, "%d\n", val);
+			++i; --memleft; --size;
+		}
+#ifdef VMMEM_RESERVE_THEN_COMMIT
+	}
+	__except ((GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION &&
+		prev_excptionaddr != membase) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+	{
+		prev_excptionaddr = membase;
+		VirtualAlloc(reinterpret_cast<void*>(reinterpret_cast<unsigned long long>(
+			membase + i * 4) & 0xFFFFFFFFFFFFF000),
+			4096, MEM_COMMIT, PAGE_READWRITE);
+	}
+	if (memleft > 0 && size>0) goto _func_start;
+#endif // VMMEM_RESERVE_THEN_COMMIT
+	return 0;
 }
 
 #include<iostream>
 
 using namespace std;
-
-void Cpu_::ins_exec_d()
-{
-	int ecode;
-	unsigned int ins;
-	unsigned long long iid;
-	int c_run = 1;
-_funcstart:
-	__try {
-		while (c_run!=0) {
-			if (regs.pc & 3) {
-				ecode = EXC_INSTRUCTION_ADDR_NOT_ALIGNED;
-				goto _handle_exceptions;
-			}
-			iid = this->memctrl.read_ins_unsafe(regs.pc, Mode);
-			if (iid & 0xffffffff) {
-				ecode = iid & 0xffffffff;
-				goto _handle_exceptions;
-			}
-			ins = GET_MEM_RW_RESULT_VAL(iid);
-			ecode = (this->*_decodeheperfuncs[reinterpret_cast<Instruction*>(&ins)->rType.opcode])(
-				*reinterpret_cast<Instruction*>(&ins));
-		_handle_exceptions:
-			if (ecode != -1) {
-				switch (ecode)
-				{
-				case EXC_INSTRUCTION_ADDR_NOT_ALIGNED:
-					cout << "instruction address not aligned at 0x" << hex <<regs.pc << endl;
-					break;
-				case EXC_INV_INSTRUCTION:
-					return;
-					cout << "invalid instruction at 0x" << hex << regs.pc << "\nval = 0x" << memctrl.memory._readp32(regs.pc) << endl;
-					break;
-				case EXC_LOAD_ADDR_NOT_ALIGNED:
-					cout << "Error! memory not aligned when read memory\nCSR mtval = " <<
-						hex << CSRs[(int)CSRid::mtval] << endl;
-					break;
-				case EXC_STORE_ADDR_NOT_ALIGNED:
-					break;
-				default:
-					break;
-				}
-			}
-			else regs.pc += 4;
-		}
-	}
-	__except (iid = reinterpret_cast<unsigned long long>(GetExceptionInformation()), 
-		GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
-		VirtualAlloc( reinterpret_cast<void*>( 
-			reinterpret_cast<_EXCEPTION_POINTERS*>(iid)->ExceptionRecord->ExceptionInformation[1] & 0xFFFFFFFFFFFFF000),
-			4096, MEM_COMMIT, PAGE_READWRITE);
-		
-	}
-	if (c_run!=0) goto _funcstart;
-}
 
 void Cpu_::ins_exec_with_jit()
 {
@@ -1239,13 +1244,17 @@ void Cpu_::ins_exec_with_jit()
 	}
 }
 
+#ifdef _JITTOOLS_ENABLED
+
 unsigned long Cpu_::runsync_with_jit()
 {
 	unsigned long long addr = 0;
 	unsigned long long ecode;
 	unsigned ix = -1;
+#ifdef VMMEM_RESERVE_THEN_COMMIT
 	__func_start:
 	__try {
+#endif // VMMEM_RESERVE_THEN_COMMIT
 		while (debugflags.flag_run) {
 			if (Mode != MODE_MACHINE) { 
 				addr = memctrl.vaddr_to_paddr_exec_unsafe(regs.pc, Mode);
@@ -1297,6 +1306,7 @@ unsigned long Cpu_::runsync_with_jit()
 			}
 			if (debugflags.flag_async && (debugflags.sleep || debugflags.sleep_req))_wait_for_signal_run();
 		}
+#ifdef VMMEM_RESERVE_THEN_COMMIT
 	}
 	__except (addr = reinterpret_cast<unsigned long long>(GetExceptionInformation()),
 		GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
@@ -1305,6 +1315,7 @@ unsigned long Cpu_::runsync_with_jit()
 			4096, MEM_COMMIT, PAGE_READWRITE);
 	}
 	if (debugflags.flag_run) goto __func_start;
+#endif // VMMEM_RESERVE_THEN_COMMIT
 	return 0;
 }
 
@@ -1316,6 +1327,8 @@ void Cpu_::run_with_jit()
 	thandle = th.native_handle();
 	th.detach();
 }
+
+#endif // _JITTOOLS_ENABLED
 
 void Cpu_::set_flag_async()
 {
@@ -1348,8 +1361,10 @@ void Cpu_::runsync()
 	int ecode;
 	unsigned int ins;
 	unsigned long long iid;
+#ifdef VMMEM_RESERVE_THEN_COMMIT
 _funcstart:
 	__try {
+#endif
 		while (debugflags.flag_run) {
 			if (regs.pc & 3) {
 				ecode = EXC_INSTRUCTION_ADDR_NOT_ALIGNED;
@@ -1372,6 +1387,7 @@ _funcstart:
 			regs.cycles++;
 			if (debugflags.flag_async && debugflags.one_step) _wait_for_signal_run();
 		}
+#ifdef VMMEM_RESERVE_THEN_COMMIT
 	}
 	__except (iid = reinterpret_cast<unsigned long long>(GetExceptionInformation()),
 		GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
@@ -1381,4 +1397,5 @@ _funcstart:
 
 	}
 	if (debugflags.flag_run) goto _funcstart;
+#endif // VMMEM_RESERVE_THEN_COMMIT
 }

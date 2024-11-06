@@ -1,6 +1,8 @@
 #ifndef _Mymem_h_
 #define _Mymem_h_
 
+#define VMMEM_RESERVE_THEN_COMMIT
+
 #define MASK_VPN_1 0xffc00000
 #define MASK_VPN_0 0x3ff000
 #define MASK_OFFSET4K 0xfff
@@ -49,8 +51,8 @@ public:
 	void _writep16(unsigned int _addr, unsigned short val);
 	void _writep32(unsigned int _addr, unsigned int val);
 	inline unsigned char* native_ptr() { return membase; }
-	inline unsigned int size() { return memsize; }
-	inline unsigned int mask() { return _mask;  }
+	inline unsigned int size() const { return memsize; }
+	inline unsigned int  mask()const { return _mask;  }
 	myMem();
 	~myMem();
 };

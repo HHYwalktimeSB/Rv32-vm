@@ -15,34 +15,8 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="mem.cpp">
+    <ClCompile Include="main.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="_cpu.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="test.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="RVVM32.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="rv32vm_exportapi.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="mem.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="_cpu.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="RVVM32.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="rv32vm_exportapi.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
   </ItemGroup>
 </Project>
