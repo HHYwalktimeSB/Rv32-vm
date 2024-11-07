@@ -19,7 +19,7 @@ void Cpu_::_init()
 	//regs.csrs = CSRs;
 	*reinterpret_cast<unsigned int*>( &debugflags) = 0;
 	debugflags.flag_run = 1;
-	debugflags.one_step = 0;
+	debugflags.flag_exit_when_inv_ins = 1;
 }
 
 bool Cpu_::_csr_readable(int csrid)
@@ -103,6 +103,7 @@ void Cpu_::_into_int()
 
 void Cpu_::_make_exception(int code, unsigned int mtval)
 {
+	if (reinterpret_cast<tagCSR::tagmstatus*>(&CSRs[(int)CSRid::mstatus])->MIE == 0)return;
 	this->debugflags.eflag = 1;
 	CSRs[(int)CSRid::mtval] = mtval;
 	reinterpret_cast<tagCSR::tagmcause*>(&CSRs[(int)CSRid::mcause])->Interrupt = 0;
@@ -122,6 +123,7 @@ void Cpu_::_make_exception(int code, unsigned int mtval)
 
 void Cpu_::_make_exception(int code)
 {
+	if (reinterpret_cast<tagCSR::tagmstatus*>(&CSRs[(int)CSRid::mstatus])->MIE == 0)return;
 	this->debugflags.eflag = 1;
 	reinterpret_cast<tagCSR::tagmcause*>(&CSRs[(int)CSRid::mcause])->Interrupt = 0;
 	reinterpret_cast<tagCSR::tagmcause*>(&CSRs[(int)CSRid::mcause])->exception_code = code;
@@ -157,6 +159,13 @@ void Cpu_::_make_mem_exception(unsigned int meme_code, unsigned io_code)
 	default:
 		break;
 	}
+}
+
+void Cpu_::Invoke_int(unsigned usrreason)
+{
+	if (reinterpret_cast<tagCSR::tagmstatus*>(&CSRs[(int)CSRid::mstatus])->MIE == 0)return;
+	debugflags.flag_int = 1;
+	debugflags.reason_for_int = usrreason;
 }
 
 int Cpu_::_ins_exec_op_alu(Instruction ins)
@@ -423,6 +432,7 @@ Cpu_::Cpu_(unsigned int mem_sz):memctrl(mem_sz, this->CSRs)
 	shandle = nullptr;
 	tstste_sus = 0;
 	CSRs = new unsigned[4096];
+	memctrl.cpuCSRs = CSRs;
 #ifdef _JITTOOLS_ENABLED
 	cache = new MambaCache_((char*)memctrl.memory.native_ptr(), memctrl.memory.mask());
 #endif // _JITTOOLS_ENABLED
@@ -431,7 +441,9 @@ Cpu_::Cpu_(unsigned int mem_sz):memctrl(mem_sz, this->CSRs)
 Cpu_::~Cpu_()
 {
 	delete[] CSRs;
+#ifdef _JITTOOLS_ENABLED
 	if (cache)delete cache;
+#endif // _JITTOOLS_ENABLED
 }
 
 unsigned int __fastcall chk_can_rw_(unsigned int pe, int io_flag) {
@@ -1269,13 +1281,6 @@ unsigned long Cpu_::runsync_with_jit()
 			case 0:
 				if (debugflags.flag_async && (debugflags.sleep || debugflags.sleep_req)) _wait_for_signal_run();
 				continue;
-			case RC_RRT_INV_INSTRUCTION:
-				return 0;
-				break;
-			case RC_RRT_SYSCALL:
-				_ins_exec_op_system (*reinterpret_cast<Instruction*>(
-					memctrl.memory.native_ptr() + (addr& memctrl.memory.mask())));
-				break;
 			case RC_RRT_MEMLOAD:
 				addr = memctrl.read_unsafe(ecode>>32, ((ecode>>22) & 0b11100) |(Mode)&3);
 				if (addr & 0xffffffff) {
@@ -1299,12 +1304,26 @@ unsigned long Cpu_::runsync_with_jit()
 				else { --regs.cycles; _make_exception(ix, ecode >> 32); }
 				regs.pc += 4;
 				break;
+			case RC_RRT_INV_INSTRUCTION:
+				if (debugflags.flag_exit_when_inv_ins)return 0;
+				ix = EXC_INV_INSTRUCTION;
+				_make_exception(ix);
+				break;
+			case RC_RRT_SYSCALL:
+				_ins_exec_op_system(*reinterpret_cast<Instruction*>(
+					memctrl.memory.native_ptr() + (addr & memctrl.memory.mask())));
+				break;
 			}
 			if (ix != -1) {
 				_into_trap();
 				++regs.cycles;
 			}
 			if (debugflags.flag_async && (debugflags.sleep || debugflags.sleep_req))_wait_for_signal_run();
+			if (debugflags.flag_int) {
+				debugflags.flag_int = 0;
+				CSRs[(int)CSRid::mepc] = regs.pc + 4;
+				_into_int();
+			}
 		}
 #ifdef VMMEM_RESERVE_THEN_COMMIT
 	}

@@ -32,79 +32,128 @@ inline char* make_alu_instruction(char* buf , Instruction ins) {
     buf = write_buf(buf, { (char)0x48u, (char)0x89u, Hex(CB) });
 #endif
     if (ins.rType.rd == 0)goto func_end_epilog;
-    if (ins.rType.rs1 == ins.rType.rd&&ins.rType.funct7 != 0b0100000 && (ins.rType.funct3 == 0 ||
-        ins.rType.funct3 == 4|| ins.rType.funct3 == 6|| ins.rType.funct3 == 7) ) {
-        if (ins.rType.rs2 == 0)buf = write_buf(buf, Make2(8b, 03));
-        else buf = write_buf(buf, Make2(8b, 43)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
-        switch (ins.rType.funct3) {
-        case 0:
-            buf = write_buf(buf, Make2(01, 43));
-            *buf = (char)(unsigned)(ins.rType.rs1 << 2);
-            ++buf;
-            break;
-        case 4://xor
-            buf = write_buf(buf, Make2(31, 43));
-            *buf = (char)(unsigned)(ins.rType.rs1 << 2);
-            ++buf;
-            break;
-        case 6://or
-            buf = write_buf(buf, Make2(09, 43));
-            *buf = (char)(unsigned)(ins.rType.rs1 << 2);
-            ++buf;
-            break;
-        case 7:
-            buf = write_buf(buf, Make2(21, 43));
-            *buf = (char)(unsigned)(ins.rType.rs1 << 2);
-            ++buf;
-            break;
+    if (ins.rType.rs1 == ins.rType.rd && (ins.rType.funct3 != 2 || ins.rType.funct3 != 3)) {
+        if (ins.rType.rs2 == 0) {
+            if (ins.rType.funct3 == 7) {
+                buf = write_buf(buf, Make2(31, c0));//xor eax, eax
+                buf = write_buf(buf, Make2(89, 43)), *buf = (unsigned char)(ins.rType.rd << 2), ++buf;
+            }
+            //else 不生成机器码
+        }
+        else {
+            switch (ins.rType.funct3) {
+            case 0:
+                buf = write_buf(buf, Make2(8b, 43)), *buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+                if(ins.rType.funct7==0)buf = write_buf(buf, Make2(01, 43));
+                else buf = write_buf(buf, Make2(29, 43));
+                *buf = (char)(unsigned)(ins.rType.rs1 << 2);
+                ++buf;
+                break;
+            case 1://left shift
+                buf = write_buf(buf, Make2(8b, 4b)), *buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+                buf = write_buf(buf, Make2(d3,63));
+                *buf = (char)(unsigned)(ins.rType.rs1 << 2);
+                ++buf;
+                break;
+            case 4://xor
+                buf = write_buf(buf, Make2(8b, 43)), *buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+                buf = write_buf(buf, Make2(31, 43));
+                *buf = (char)(unsigned)(ins.rType.rs1 << 2);
+                ++buf;
+                break;
+            case 6://or
+                buf = write_buf(buf, Make2(8b, 43)), *buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+                buf = write_buf(buf, Make2(09, 43));
+                *buf = (char)(unsigned)(ins.rType.rs1 << 2);
+                ++buf;
+                break;
+            case 7://and
+                buf = write_buf(buf, Make2(8b, 43)), *buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+                buf = write_buf(buf, Make2(21, 43));
+                *buf = (char)(unsigned)(ins.rType.rs1 << 2);
+                ++buf;
+                break;
+            case 5://rs
+                buf = write_buf(buf, Make2(8b, 4b)), *buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+                if(ins.rType.funct7 == 0) buf = write_buf(buf, Make2(d3, 6b));
+                else buf = write_buf(buf, Make2(d3, 7b));
+                *buf = (char)(unsigned)(ins.rType.rs1 << 2);
+                ++buf;
+                break;
+            }
         }
     }
     else {
-        if (ins.rType.rs1 == 0)buf = write_buf(buf, Make2(8b, 03));
-        else buf = write_buf(buf, Make2(8b, 43)), * buf = (unsigned char)(ins.rType.rs1 << 2), ++buf;
-        switch (ins.rType.funct3)
-        {
-        case 0:
-            if (ins.rType.funct7 == 0b0100000) {//sub
-                if (ins.rType.rs2 == 0)buf = write_buf(buf, Make2(2b, 03));
-                else buf = write_buf(buf, Make2(2b, 43)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+        if (ins.rType.rs1 == 0&&((ins.rType.funct3 != 2 || ins.rType.funct3 != 3))) {
+            if (ins.rType.funct3 == 7|| ins.iType.funct3 == 1|| (ins.rType.funct3==5&& ins.rType.funct7==0)) {
+                buf = write_buf(buf, Make2(31, c0));//xor eax, eax
+                buf = write_buf(buf, Make2(89, 43)), * buf = (unsigned char)(ins.rType.rd << 2), ++buf;
             }
-            else {//add
-                if (ins.rType.rs2 == 0)buf = write_buf(buf, Make2(03, 03));
-                else buf = write_buf(buf, Make2(03, 43)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+            else if (ins.rType.funct3 == 5 && ins.rType.funct7 == 0b0100000&& ins.rType.rs2!=0) {//sar
+                goto _hand_normal_case;
             }
-            break;
-        case 1: //shift left logic
-            if (ins.rType.rs1 == 0)buf = write_buf(buf, Make2(8b, 0b));
-            else buf = write_buf(buf, Make2(8b, 4b)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
-            buf = write_buf(buf, Make2(d3, e0));
-            break;
-        case 2: //slt
-        case 3: //sltu
-            if (ins.rType.rs2 == 0)buf = write_buf(buf, Make2(3b, 03));
-            else buf = write_buf(buf, Make2(3b, 43)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;//cmp
-            buf = write_buf(buf, Make3(31, c0, c3));// xor eax, eax
-            if (ins.rType.funct3 == 2)buf = write_buf(buf, Make3(0f, 9c, c0)); else buf = write_buf(buf, Make3(0f, 92, c0));//set
-            break;
-        case 4://xor
-            if (ins.rType.rs2 == 0)buf = write_buf(buf, Make2(33, 03));
-            else buf = write_buf(buf, Make2(33, 43)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
-            break;
-        case 5://rs
-            if (ins.rType.rs1 == 0)buf = write_buf(buf, Make2(8b, 0b));
-            else buf = write_buf(buf, Make2(8b, 4b)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
-            if (ins.rType.funct7 == 0b0100000)buf = write_buf(buf, Make2(d3, f8));
-            else buf = write_buf(buf, Make2(d3, e8));
-            break;
-        case 6://or
-            if (ins.rType.rs2 == 0)buf = write_buf(buf, Make2(0b, 03));
-            else buf = write_buf(buf, Make2(0b, 43)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
-            break;
-        case 7://and
-            if (ins.rType.rs2 == 0)buf = write_buf(buf, Make2(23, 03));
-            else buf = write_buf(buf, Make2(23, 43)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+            else {//or, add, sub, xor
+                if(ins.rType.rs2==0)buf = write_buf(buf, Make2(31, c0));//xor eax, eax
+                else buf = write_buf(buf, Make2(8b, 43)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+                buf = write_buf(buf, Make2(89, 43)), * buf = (unsigned char)(ins.rType.rd << 2), ++buf;
+                //copy  [rbx+ rd] <- [rbx + rs2]  
+            }
         }
-        buf = write_buf(buf, Make2(89, 43)), * buf = (unsigned char)(ins.rType.rd << 2), ++buf;
+        else if (ins.rType.rs2 == 0 && (ins.rType.funct3 != 2 || ins.rType.funct3 != 3)) {
+            if (ins.rType.funct3 == 7) {
+                buf = write_buf(buf, Make2(31, c0));//xor eax, eax
+                buf = write_buf(buf, Make2(89, 43)), * buf = (unsigned char)(ins.rType.rd << 2), ++buf;
+            }
+            else {
+                buf = write_buf(buf, Make2(8b, 43)), * buf = (unsigned char)(ins.rType.rs1 << 2), ++buf;
+                buf = write_buf(buf, Make2(89, 43)), * buf = (unsigned char)(ins.rType.rd << 2), ++buf;
+            }
+        }
+        else{//normal case
+            _hand_normal_case:
+            if(ins.rType.rs1 == 0)buf = write_buf(buf, Make2(31, c0));//xor eax, eax
+            else buf = write_buf(buf, Make2(8b, 43)), * buf = (unsigned char)(ins.rType.rs1 << 2), ++buf;
+            switch (ins.rType.funct3)
+            {
+            case 0:
+                if (ins.rType.funct7 == 0b0100000) {//sub
+                    buf = write_buf(buf, Make2(2b, 43)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+                }
+                else {//add
+                    buf = write_buf(buf, Make2(03, 43)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+                }
+                break;
+            case 1: //shift left logic
+                //if (ins.rType.rs1 == 0)buf = write_buf(buf, Make2(8b, 0b));
+                buf = write_buf(buf, Make2(8b, 4b)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+                buf = write_buf(buf, Make2(d3, e0));
+                break;
+            case 2: //slt
+            case 3: //sltu
+                if (ins.rType.rs2 == 0)buf = write_buf(buf, Make2(3b, 03));
+                else buf = write_buf(buf, Make2(3b, 43)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;//cmp
+                buf = write_buf(buf, Make3(31, c0, c3));// xor eax, eax
+                if (ins.rType.funct3 == 2)buf = write_buf(buf, Make3(0f, 9c, c0)); else buf = write_buf(buf, Make3(0f, 92, c0));//set
+                break;
+            case 4://xor
+                if (ins.rType.rs2 == 0)buf = write_buf(buf, Make2(33, 03));
+                else buf = write_buf(buf, Make2(33, 43)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+                break;
+            case 5://rs
+                //if (ins.rType.rs1 == 0)buf = write_buf(buf, Make2(8b, 0b));
+                buf = write_buf(buf, Make2(8b, 4b)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+                if (ins.rType.funct7 == 0b0100000)buf = write_buf(buf, Make2(d3, f8));
+                else buf = write_buf(buf, Make2(d3, e8));
+                break;
+            case 6://or
+                buf = write_buf(buf, Make2(0b, 43)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+                break;
+            case 7://and
+                buf = write_buf(buf, Make2(23, 43)), * buf = (unsigned char)(ins.rType.rs2 << 2), ++buf;
+                break;
+            }
+            buf = write_buf(buf, Make2(89, 43)), * buf = (unsigned char)(ins.rType.rd << 2), ++buf;
+        }
     }
     func_end_epilog:
     buf = PC_INC(buf);
@@ -117,82 +166,151 @@ inline char* make_alu_instruction_imm(char* buf, Instruction ins) {
     buf = write_buf(buf, { (char)0x48, (char)0x89, Hex(CB) });
 #endif
     unsigned int imm = _sign_ext<12>(ins.iType.imm);
+    if (ins.iType.funct3 == 5 && ins.rType.funct7 == 0b0100000)imm &= 31;
     if (ins.rType.rd == 0)goto func_end_epilog;
-    if (ins.rType.rs1 == ins.rType.rd && (ins.rType.funct3 == 0 ||
-        ins.rType.funct3 == 4 || ins.rType.funct3 == 6 || ins.rType.funct3 == 7)) {
-        switch (ins.rType.funct3) {
-        case 0:
-            buf = write_buf(buf, Make2(81, 43));
-            *buf = (char)(unsigned)(ins.rType.rs1 << 2);
-            ++buf;
-            buf = write_buf(buf, imm);
-            break;
-        case 4://xor
-            buf = write_buf(buf, Make2(81, 73));
-            *buf = (char)(unsigned)(ins.rType.rs1 << 2);
-            ++buf;
-             buf = write_buf(buf, imm);
-            break;
-        case 6://or
-            buf = write_buf(buf, Make2(81, 63));
-            *buf = (char)(unsigned)(ins.rType.rs1 << 2);
-            ++buf;
-            buf = write_buf(buf, imm);
-            break;
-        case 7:
-            buf = write_buf(buf, Make2(81, 4b));
-            *buf = (char)(unsigned)(ins.rType.rs1 << 2);
-            ++buf;
-            buf = write_buf(buf, imm);
-            break;
+    if (ins.rType.rs1 == ins.rType.rd && (ins.rType.funct3 != 2 || ins.rType.funct3!=3)) {
+        if (imm==0) {
+            if (ins.rType.funct3 == 7) {
+                buf = write_buf(buf, Make2(31, c0));//xor eax, eax
+                buf = write_buf(buf, Make2(89, 43)), * buf = (unsigned char)(ins.rType.rd << 2), ++buf;
+            }
+            //else: nothing need to do
+        }
+        else {
+            switch (ins.rType.funct3) {
+            case 0:
+                if (imm == 1) {
+                    buf = write_buf(buf, Make2(ff, 43));
+                    *buf = (char)(unsigned)(ins.rType.rs1 << 2);
+                        ++buf;
+                }
+                else if (imm == -1) { buf = write_buf(buf, Make2(ff, 4b)); 
+                *buf = (char)(unsigned)(ins.rType.rs1 << 2);
+                ++buf;
+                }
+                else{
+                buf = write_buf(buf, Make2(81, 43));
+                *buf = (char)(unsigned)(ins.rType.rs1 << 2);
+                ++buf;
+                buf = write_buf(buf, imm);
+            }
+                break;
+            case 1://sll
+                buf = write_buf(buf, Make2(c1, 63));
+                *buf = (char)(unsigned)(ins.rType.rs1 << 2); ++buf;
+                *buf = (char)(imm); ++buf;
+                break;
+            case 4://xor
+                buf = write_buf(buf, Make2(81, 73));
+                *buf = (char)(unsigned)(ins.rType.rs1 << 2);
+                ++buf;
+                buf = write_buf(buf, imm);
+                break;
+            case 6://or
+                buf = write_buf(buf, Make2(81, 63));
+                *buf = (char)(unsigned)(ins.rType.rs1 << 2);
+                ++buf;
+                buf = write_buf(buf, imm);
+                break;
+            case 5:
+                if(ins.rType.funct7==0) buf = write_buf(buf, Make2(c1, 6b));
+                else buf = write_buf(buf, Make2(c1, 7b));
+                *buf = (char)(unsigned)(ins.rType.rs1 << 2); ++buf;
+                *buf = (char)(imm); ++buf;
+                break;
+            case 7:
+                buf = write_buf(buf, Make2(81, 4b));
+                *buf = (char)(unsigned)(ins.rType.rs1 << 2);
+                ++buf;
+                buf = write_buf(buf, imm);
+                break;
+            }
         }
     }
     else {
-        if (ins.rType.rs1 == 0)buf = write_buf(buf, Make2(8b, 03));
-        else buf = write_buf(buf, Make2(8b, 43)), * buf = (ins.rType.rs1 << 2), ++buf;
-        switch (ins.rType.funct3)
-        {
-        case 0://add
-            *buf = Hex(05), ++buf;
-            buf = write_buf(buf, (char*)&imm, 4);
-            break;
-        case 1: //shift left logic
-            *buf = Hex(b1), ++buf;
-            *buf = (unsigned char)imm, ++buf;
-            buf = write_buf(buf, Make2(d3, e0));
-            break;
-        case 2: //slt
-        case 3: //sltu
-            *buf = Hex(3d), ++buf; buf = write_buf(buf, imm);//cmp eax, imm
-            buf = write_buf(buf, Make3(31, c0, c3));// xor eax,rax
-            if (ins.rType.funct3 == 2)buf = write_buf(buf, Make3(0f, 9c, c0)); //set signed
-            else buf = write_buf(buf, Make3(0f, 92, c0));//set unsigned
-            break;
-        case 4://xor
-            *buf = Hex(35), ++buf;
-            buf = write_buf(buf, (char*)&imm, 4);
-            break;
-        case 5://rs
-            *buf = Hex(b1), ++buf;
-            if (ins.rType.funct7 == 0b0100000) {
-                ins.rType.funct7 = 0u;
-                *buf = (unsigned char)ins.iType.imm, ++buf;
-                buf = write_buf(buf, Make2(d3, f8));
+        if (ins.rType.rs1 == 0 && (ins.rType.funct3 != 2 || ins.rType.funct3 != 3)) {
+            if (ins.rType.funct3 == 7 || ins.iType.funct3 == 1 || (ins.rType.funct3 == 5 && ins.rType.funct7 == 0)) {
+                buf = write_buf(buf, Make2(31, c0));//xor eax, eax
+                buf = write_buf(buf, Make2(89, 43)), * buf = (unsigned char)(ins.rType.rd << 2), ++buf;
             }
-            else {
-                *buf = (unsigned char)imm, ++buf;
-                buf = write_buf(buf, Make2(d3, e8));
+            else if (ins.rType.funct3 == 5 && ins.rType.funct7 == 0b0100000 && imm != 0)
+            {
+                goto _handle_normal_case;
             }
-            break;
-        case 6://or
-            *buf = Hex(0d), ++buf;
-            buf = write_buf(buf, (char*)&imm, 4);
-            break;
-        case 7://and
-            *buf = Hex(25), ++buf;
-            buf = write_buf(buf, (char*)&imm, 4);
+            else
+            {//or, add, sub, xor
+                if (imm==0)buf = write_buf(buf, Make2(31, c0));//xor eax, eax
+                else {
+                    buf[0] = Hex(b8); ++buf;
+                    buf = write_buf(buf,imm);
+                }
+                buf = write_buf(buf, Make2(89, 43)), * buf = (unsigned char)(ins.rType.rd << 2), ++buf;
+                //copy  [rbx+ rd] <- [rbx + rs2]  
+            }
         }
-        buf = write_buf(buf, Make2(89, 43)), * buf = (ins.rType.rd << 2), ++buf;
+        else if (imm == 0 && (ins.rType.funct3 != 2 || ins.rType.funct3 != 3)) {
+            if (ins.iType.funct3 == 0 || ins.iType.funct3 == 6|| ins.iType.funct3 == 4) {
+                if (imm != 0) {
+                    *buf = (unsigned char)0xb8u, ++buf;
+                    buf = write_buf(buf, (char*)&imm, 4);
+                }
+                else buf = write_buf(buf, Make2(31, c0));
+            }
+            else  buf = write_buf(buf, Make2(31, c0)); 
+            buf = write_buf(buf, Make2(89, 43)), * buf = (ins.rType.rd << 2), ++buf;
+        }
+        else {
+            _handle_normal_case:
+            if (ins.rType.rs1 == 0)buf = write_buf(buf, Make2(31, c0));
+            else buf = write_buf(buf, Make2(8b, 43)), * buf = (ins.rType.rs1 << 2), ++buf;
+            switch (ins.rType.funct3)
+            {
+            case 0://add
+                if (imm == 1) buf = write_buf(buf, Make2(ff, c0));
+                else if (imm == -1)buf = write_buf(buf, Make2(ff, c8));
+                else {
+                    *buf = Hex(05); ++buf;
+                    buf = write_buf(buf, imm);
+                }
+                break;
+            case 1: //shift left logic
+                *buf = Hex(b1), ++buf;
+                *buf = (unsigned char)imm, ++buf;
+                buf = write_buf(buf, Make2(d3, e0));
+                break;
+            case 2: //slt
+            case 3: //sltu
+                *buf = Hex(3d), ++buf; buf = write_buf(buf, imm);//cmp eax, imm
+                buf = write_buf(buf, Make3(31, c0, c3));// xor eax,rax
+                if (ins.rType.funct3 == 2)buf = write_buf(buf, Make3(0f, 9c, c0)); //set signed
+                else buf = write_buf(buf, Make3(0f, 92, c0));//set unsigned
+                break;
+            case 4://xor
+                *buf = Hex(35), ++buf;
+                buf = write_buf(buf, imm);
+                break;
+            case 5://rs
+                *buf = Hex(b1), ++buf;
+                if (ins.rType.funct7 == 0b0100000) {
+                    ins.rType.funct7 = 0u;
+                    *buf = (unsigned char)ins.iType.imm, ++buf;
+                    buf = write_buf(buf, Make2(d3, f8));
+                }
+                else {
+                    *buf = (unsigned char)imm, ++buf;
+                    buf = write_buf(buf, Make2(d3, e8));
+                }
+                break;
+            case 6://or
+                *buf = Hex(0d), ++buf;
+                buf = write_buf(buf, (char*)&imm, 4);
+                break;
+            case 7://and
+                *buf = Hex(25), ++buf;
+                buf = write_buf(buf, (char*)&imm, 4);
+            }
+            buf = write_buf(buf, Make2(89, 43)), * buf = (ins.rType.rd << 2), ++buf;
+        }
     }
 func_end_epilog:
     buf = PC_INC(buf);
@@ -798,11 +916,20 @@ const void* MambaCache_::read_withoutHAJIfunction(unsigned addr)
 
 __declspec(naked) void __fastcall ddddd(void* p) {
     __asm {
-
-        add eax, 2047
-        shl rax, 32
+        xor eax, eax
+        add dword ptr[rbx + 4], -2000
+        and dword ptr[rbx + 12], 2047
+        or dword ptr[rbx + 4], 2047
+        xor dword ptr[rbx + 12], 2047
+        mov eax, 2047
+        shl dword ptr[rbx + 4], 31
+        shr dword ptr[rbx + 12], 31
+        sar dword ptr[rbx + 4], 31
+        inc dword ptr[rbx + 12];
+        inc eax
+        dec eax
+        dec dword ptr[rbx + 4];
         mov ecx, 0xf8300001
-        or rax, rcx
         inc qword ptr[rbx+136]
         ret
     }

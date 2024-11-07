@@ -21,21 +21,18 @@
     <ClInclude Include="pch.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="_dev_impl.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="pyMod.h">
+    <ClInclude Include="export.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="dllmain.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="_dev_impl.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="pyMod.cpp">
+    <ClCompile Include="export.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

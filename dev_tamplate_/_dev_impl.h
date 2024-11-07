@@ -38,6 +38,7 @@ protected:
 	CoreMem(Mode md,unsigned sz,const char* n);
 	CoreMem(const CoreMem&);
 	~CoreMem();
+	inline char* get_bufptr() { return buf; }
 public:
 	int get_refcnt()const;
 };
@@ -48,19 +49,25 @@ class _DevBase : public CoreMem{
 protected:
 	void* phandle;
 	Schedule* pSchedule;
-	void (__cdecl *pcfn)(void*);
+	std::function<void(unsigned)> FnCallbackInt;
+	void FnBindingud();
 public:
 	virtual void _cb_writedata();
 	virtual void _cb_readdata();
 	virtual void update();
-	_DevBase(Mode md, unsigned sz, const char* n, Schedule*, void*, void(__cdecl*)(void*));
+	_DevBase(Mode md, unsigned sz, const char* n, Schedule*, void*, const std::function<void(unsigned)>&);
+	_DevBase(const _DevBase&);
 	virtual ~_DevBase();
 	void write(unsigned addr, unsigned val, unsigned sz);
 	unsigned read(unsigned addr, unsigned sz);
+	void InvokeInt(unsigned code);
+	void update_loop_async();
+	void RunLoopinMode1();
+	void* GetHandle();
 };
 
 //never call it in a module
-void __cdecl unload_dll(void*);
+int __cdecl unload_dll(void*);
 
 class Schedule {
 public:
@@ -71,15 +78,18 @@ protected:
 		long long cnt;
 	};
 	std::mutex guard;
-	std::list<std::pair<Ts, std::function<void()> > > tasklist;
+	std::list<std::pair<Ts, std::function<int()> > > tasklist;
+	std::list<void*>phandle_freelst;
 	int sig_krunning;
 	void* handle;
+	void add_fn_unsafe(std::function<int()>&& _Fn, long long delay);
 public:
 	unsigned clk_definterval;
 	void clk_update();
-	void add_fn(std::function<void()> && _Fn, unsigned interval, long long delay = 0, unsigned rep = 0xffffffff);
-	void add_fn(const std::function<void()>& _Fn, unsigned interval, long long delay = 0, unsigned rep = 0xffffffff);
+	void add_fn(std::function<int()> && _Fn, unsigned interval, long long delay = 0, unsigned rep = 0xffffffff);
+	void add_fn(const std::function<int()>& _Fn, unsigned interval, long long delay = 0, unsigned rep = 0xffffffff);
 	Schedule(unsigned di);
+	void add_handle_to_freelist(void* handle);
 	~Schedule();
 };
 
@@ -94,8 +104,8 @@ public:
 #define MYAPI_CC __cdecl
 #endif
 
-MY_API _DevBase* CreateObj(void* handle, Schedule*,void(MYAPI_CC*)(void*));
+MY_API _DevBase* CreateObj(void* handle, Schedule*);
 
-typedef _DevBase*(MYAPI_CC *DevEntry_Fn)(void*, Schedule*, void(MYAPI_CC*)(void*));
+typedef _DevBase*(MYAPI_CC *DevEntry_Fn)(void*, Schedule*);
 
 #endif

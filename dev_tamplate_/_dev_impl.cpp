@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "_dev_impl.h"
 #include<Windows.h>
+#include<string>
 
 unsigned short CoreMem::readw(unsigned addr)
 {
@@ -60,11 +61,14 @@ CoreMem::CoreMem(Mode md, unsigned sz, const char* n):mode(md),size(sz)
 		reference_cnt[0] = 1;
 		break;
 	case CoreMem::Mode::fmmem:
+	{
 		if (n == nullptr)throw "error empty name";
-		hfm = OpenFileMappingA(FILE_MAP_ALL_ACCESS, TRUE, name);
+		std::string fin = n;
+			fin += "_mem_swap_file";
+		hfm = OpenFileMappingA(FILE_MAP_ALL_ACCESS, TRUE, fin.c_str());
 		if (!hfm) {
 			hfm = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, FILE_MAP_ALL_ACCESS,
-				0, sz + sizeof(SharedMemctrlInfo), n);
+				0, sz + sizeof(SharedMemctrlInfo), fin.c_str());
 			if (!hfm) throw "err no enough mem";
 			hse = CreateSemaphoreA(NULL, 1, 1, n);
 			buf = (char*)MapViewOfFile(hfm, PAGE_READWRITE, 0, 0, sz + sizeof(SharedMemctrlInfo));
@@ -76,6 +80,7 @@ CoreMem::CoreMem(Mode md, unsigned sz, const char* n):mode(md),size(sz)
 		}
 		buf += sizeof(SharedMemctrlInfo);
 		reference_cnt = nullptr;
+	}
 		break;
 	default:
 		hfm = hse = NULL;
@@ -204,7 +209,6 @@ void Schedule::clk_update()
 		elapsed = chrono::duration_cast<chrono::microseconds>(ts - tp).count();
 		guard.lock();
 		sleepus = clk_definterval;
-		tasklist.begin();
 		for (auto a = tasklist.begin(); a != tasklist.end(); ++a) {
 			a->first.cnt -= elapsed;
 			if (a->first.cnt <= 0) {
@@ -219,6 +223,10 @@ void Schedule::clk_update()
 			for (auto &a : dddd) tasklist.erase(a);
 			dddd.clear();
 		}
+		if (!phandle_freelst.empty()) {
+			for (auto a : phandle_freelst)add_fn_unsafe(std::bind(unload_dll, a), 10000000);
+			phandle_freelst.clear();
+		}
 		guard.unlock();
 		tp = chrono::high_resolution_clock::now();
 		diff = chrono::duration_cast<chrono::microseconds>(ts - tp).count();
@@ -227,7 +235,7 @@ void Schedule::clk_update()
 	}
 }
 
-void Schedule::add_fn(std::function<void()>&& _Fn, unsigned interval, long long delay, unsigned rep)
+void Schedule::add_fn(std::function<int()>&& _Fn, unsigned interval, long long delay, unsigned rep)
 {
 	Ts ttt;
 	ttt.rep = rep;
@@ -238,7 +246,7 @@ void Schedule::add_fn(std::function<void()>&& _Fn, unsigned interval, long long 
 	guard.unlock();
 }
 
-void Schedule::add_fn(const std::function<void()>& _Fn, unsigned interval, long long delay, unsigned rep)
+void Schedule::add_fn(const std::function<int()>& _Fn, unsigned interval, long long delay, unsigned rep)
 {
 	Ts ttt;
 	ttt.rep = rep;
@@ -247,6 +255,15 @@ void Schedule::add_fn(const std::function<void()>& _Fn, unsigned interval, long 
 	guard.lock();
 	tasklist.emplace_back(ttt, _Fn);
 	guard.unlock();
+}
+
+void Schedule::add_fn_unsafe(std::function<int()>&& _Fn, long long delay)
+{
+	Ts ttt;
+	ttt.rep = 1;
+	ttt.cnt = delay;
+	ttt.interval = 1000000;
+	tasklist.emplace_back(ttt, std::move(_Fn));
 }
 
 Schedule::Schedule(unsigned di)
@@ -258,10 +275,22 @@ Schedule::Schedule(unsigned di)
 	th.detach();
 }
 
+void Schedule::add_handle_to_freelist(void* handle)
+{
+	guard.lock();
+	this->phandle_freelst.push_back(handle);
+	guard.unlock();
+}
+
 Schedule::~Schedule()
 {
 	sig_krunning = 0;
 	WaitForSingleObject(handle, 20);
+}
+
+void _DevBase::FnBindingud()
+{
+	this->update();
 }
 
 void _DevBase::_cb_writedata()
@@ -276,16 +305,24 @@ void _DevBase::update()
 {
 }
 
-_DevBase::_DevBase(Mode md, unsigned sz, const char* n, Schedule* s, void*h, void(__cdecl *fn)(void*)):CoreMem(md,sz,n)
+_DevBase::_DevBase(Mode md, unsigned sz, const char* n, Schedule* s, void*h, const std::function<void(unsigned)> & Fn):CoreMem(md,sz,n)
 {
 	phandle = h;
 	pSchedule = s;
-	pcfn = fn;
+	FnCallbackInt = Fn;
 }
+
+_DevBase::_DevBase(const _DevBase& b) :CoreMem(b)
+{
+	phandle = b.phandle;
+	pSchedule = b.pSchedule;
+	FnCallbackInt = b.FnCallbackInt;
+}
+
 
 _DevBase::~_DevBase()
 {
-	if (get_refcnt() <= 1)pSchedule->add_fn(std::bind(pcfn, phandle), 100, 100000, 1);
+	if (get_refcnt())pSchedule->add_handle_to_freelist(phandle);
 }
 
 void _DevBase::write(unsigned addr, unsigned val, unsigned sz)
@@ -329,7 +366,31 @@ unsigned _DevBase::read(unsigned addr, unsigned sz)
 	return r;
 }
 
-void __cdecl unload_dll(void* hand)
+void _DevBase::InvokeInt(unsigned code)
+{
+	this->FnCallbackInt(code);
+}
+
+void _DevBase::update_loop_async()
+{
+	while (reinterpret_cast<SharedMemctrlInfo*>(get_bufptr() - sizeof(SharedMemctrlInfo))->sigkill == 0) {
+		this->update();
+	}
+}
+
+void _DevBase::RunLoopinMode1()
+{
+	std::thread th(&_DevBase::update_loop_async, this);
+	th.detach();
+}
+
+void* _DevBase::GetHandle()
+{
+	return phandle;
+}
+
+int __cdecl unload_dll(void* hand)
 {
 	FreeLibrary((HMODULE)hand);
+	return -1;
 }

@@ -337,7 +337,7 @@ public:
 class DLLEXPORTCLASS Cpu_
 {
 public:
-	//void Invoke_int();//reserved
+	void Invoke_int(unsigned usrreason);//reserved
 
 private:
 	int _ins_exec_op_alu(Instruction ins);
@@ -351,14 +351,15 @@ private:
 	{
 		unsigned int one_step : 1;
 		unsigned int pause : 1;
-		unsigned int wait : 1;
+		unsigned int flag_exit_when_inv_ins : 1;
 		unsigned int flag_run : 1;
 		unsigned int flag_int : 1;
 		unsigned int eflag : 1;
 		unsigned int flag_async : 1;
 		unsigned int sleep : 1;
 		unsigned int sleep_req : 1;
-		unsigned int reserved : 23;
+		unsigned int reserved : 3;
+		unsigned int reason_for_int: 20;
 	};
 	mycpuwalktimeflags debugflags;
 	MemController memctrl;
