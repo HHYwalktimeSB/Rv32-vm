@@ -32,11 +32,17 @@ public:
 (decltype(&_ProcName__))reinterpret_cast<void*>(GetProcAddress(handle_dll, #_ProcName__));\
 if(this->GETFUNCTION(_ProcName__)==nullptr)throw ToText(Cannot find function: ##_ProcName__)
 
+#define GFn(_Fn_) ((LibPy*)pLib)->GETFUNCTION(_Fn_)
 
-PythonModule::PythonModule(const char* n, unsigned sz,Schedule* s,const std::function<void(unsigned)>& Fn):
-	_DevBase(Mode::fmmem,sz,n, s,nullptr,Fn)
+
+PythonModule::PythonModule(const char* n, unsigned sz,const std::function<void(unsigned)>& Fn, const char* name, void* pmod):
+	_DevBase(Mode::fmmem,sz,n, nullptr ,nullptr,Fn)
 {
 	if(pLib==nullptr)pLib = new LibPy;
+	pmodule = pmod;
+	cb_read = GFn(PyObject_GetAttrString)((PyObject*)pmodule, "modfn_cbread");
+	cb_write = GFn(PyObject_GetAttrString)((PyObject*)pmodule, "modfn_cbwrite");
+	cb_update = GFn(PyObject_GetAttrString)((PyObject*)pmodule, "modfn_cbupdate");
 }
 
 void PythonModule::SetPathToPythonRuntime(const char* path)
@@ -55,8 +61,6 @@ void PythonModule::FinaliseRuntime()
 {
 	((LibPy*)pLib)->myLibPy_Finalize();
 }
-
-#define GFn(_Fn_) ((LibPy*)pLib)->GETFUNCTION(_Fn_)
 
 void PythonModule::_cb_writedata()
 {
@@ -77,6 +81,19 @@ void PythonModule::update()
 	if (cb_update) {
 		GFn(PyObject_CallObject)((PyObject*)cb_update, NULL);
 	}
+}
+
+_DevBase* PythonModule::CreateObj(const char* name_to_py, const std::function<void(unsigned)>&)
+{
+	auto mod = GFn(PyImport_ImportModule)(name_to_py);
+	unsigned size;
+	char* buf;
+	auto pyfn = GFn(PyObject_GetAttrString)((PyObject*)mod, "modfn_getname");
+	if (pyfn && PyCallable_Check(pyfn)) {
+
+	}
+	else throw "error cannot find function: \"modfn_getname\"";
+	return nullptr;
 }
 
 PythonModule::~PythonModule()

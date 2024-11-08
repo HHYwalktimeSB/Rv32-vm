@@ -105,14 +105,14 @@ CoreMem::CoreMem(const CoreMem& b)
 		buf = b.buf;
 		reference_cnt = b.reference_cnt;
 		hfm = b.hfm;
-		*reference_cnt++;
+		*(reference_cnt)++;
 	}
 	else {
 		hse = nullptr;
 		buf = b.buf;
 		reference_cnt = b.reference_cnt;
 		hfm = b.hfm;
-		*reference_cnt++;
+		*(reference_cnt)++;
 	}
 
 }
@@ -223,10 +223,6 @@ void Schedule::clk_update()
 			for (auto &a : dddd) tasklist.erase(a);
 			dddd.clear();
 		}
-		if (!phandle_freelst.empty()) {
-			for (auto a : phandle_freelst)add_fn_unsafe(std::bind(unload_dll, a), 10000000);
-			phandle_freelst.clear();
-		}
 		guard.unlock();
 		tp = chrono::high_resolution_clock::now();
 		diff = chrono::duration_cast<chrono::microseconds>(ts - tp).count();
@@ -257,15 +253,6 @@ void Schedule::add_fn(const std::function<int()>& _Fn, unsigned interval, long l
 	guard.unlock();
 }
 
-void Schedule::add_fn_unsafe(std::function<int()>&& _Fn, long long delay)
-{
-	Ts ttt;
-	ttt.rep = 1;
-	ttt.cnt = delay;
-	ttt.interval = 1000000;
-	tasklist.emplace_back(ttt, std::move(_Fn));
-}
-
 Schedule::Schedule(unsigned di)
 {
 	clk_definterval = di>=50?di:50;
@@ -273,13 +260,6 @@ Schedule::Schedule(unsigned di)
 	std::thread th(&Schedule::clk_update, this);
 	handle = th.native_handle();
 	th.detach();
-}
-
-void Schedule::add_handle_to_freelist(void* handle)
-{
-	guard.lock();
-	this->phandle_freelst.push_back(handle);
-	guard.unlock();
 }
 
 Schedule::~Schedule()
@@ -322,7 +302,6 @@ _DevBase::_DevBase(const _DevBase& b) :CoreMem(b)
 
 _DevBase::~_DevBase()
 {
-	if (get_refcnt())pSchedule->add_handle_to_freelist(phandle);
 }
 
 void _DevBase::write(unsigned addr, unsigned val, unsigned sz)
@@ -378,10 +357,21 @@ void _DevBase::update_loop_async()
 	}
 }
 
+DWORD __stdcall _CbFnt(void* ptr) {
+	_DevBase* dev = (_DevBase*)ptr;
+	dev->update_loop_async();
+	void* hdll = dev->GetHandle();
+	delete dev;
+	if(hdll)FreeLibraryAndExitThread((HMODULE)hdll,0);
+	return 0;
+}
+
 void _DevBase::RunLoopinMode1()
 {
-	std::thread th(&_DevBase::update_loop_async, this);
-	th.detach();
+	SECURITY_ATTRIBUTES sa{ 0 };
+	sa.bInheritHandle = TRUE;
+	sa.nLength = sizeof(sa);
+	CreateThread(&sa, 0, &_CbFnt, this, 0, 0);
 }
 
 void* _DevBase::GetHandle()

@@ -42,9 +42,15 @@ MY_API int MYAPI_CC Vmmem_read(unsigned src_addr, char* buf, int elem_sz, int el
 
 MY_API int MYAPI_CC Vmmem_load_binary(unsigned dst_paddr, const char* fn);
 
-MY_API int MYAPI_CC Vmmem_load_hex(unsigned dst_paddr, const char* fn);
+MY_API int MYAPI_CC Vmmem_load_hex(const char* fn,unsigned);
 
 MY_API int MYAPI_CC Vmmem_store_hex(unsigned dst_paddr, const char* fn, unsigned sz);
+
+MY_API int MYAPI_CC VmCPU_RecordRegs(unsigned index);
+
+MY_API int MYAPI_CC VmCPU_CmpRegs(unsigned index);
+
+MY_API int MYAPI_CC Vm_RunSync();
 
 
 #endif // !RV32VM_EXPORTAPI

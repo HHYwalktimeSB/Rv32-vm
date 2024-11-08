@@ -61,7 +61,7 @@ public:
 	void write(unsigned addr, unsigned val, unsigned sz);
 	unsigned read(unsigned addr, unsigned sz);
 	void InvokeInt(unsigned code);
-	void update_loop_async();
+	void update_loop_async();//never call on host
 	void RunLoopinMode1();
 	void* GetHandle();
 };
@@ -79,17 +79,14 @@ protected:
 	};
 	std::mutex guard;
 	std::list<std::pair<Ts, std::function<int()> > > tasklist;
-	std::list<void*>phandle_freelst;
 	int sig_krunning;
 	void* handle;
-	void add_fn_unsafe(std::function<int()>&& _Fn, long long delay);
 public:
 	unsigned clk_definterval;
 	void clk_update();
 	void add_fn(std::function<int()> && _Fn, unsigned interval, long long delay = 0, unsigned rep = 0xffffffff);
 	void add_fn(const std::function<int()>& _Fn, unsigned interval, long long delay = 0, unsigned rep = 0xffffffff);
 	Schedule(unsigned di);
-	void add_handle_to_freelist(void* handle);
 	~Schedule();
 };
 

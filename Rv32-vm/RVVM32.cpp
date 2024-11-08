@@ -12,7 +12,7 @@ _DevBase* MyVm::_device_attach(const char* path)
 	if (Hmod == NULL)return nullptr;
 	void* fn = GetProcAddress((HMODULE)Hmod, "CreateObj");
 	if (fn == NULL)return nullptr;
-	return ((DevEntry_Fn)fn)(Hmod, nullptr, &unload_dll);
+	return ((DevEntry_Fn)fn)(Hmod, nullptr);
 }
 
 void MyVm::init_(unsigned memory_size)

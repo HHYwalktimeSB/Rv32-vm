@@ -8,7 +8,7 @@ protected:
 	void* cb_write;
 	void* cb_read;
 protected:
-	PythonModule(const char* n, unsigned sz, Schedule* s,const std::function<void(unsigned)>&);
+	PythonModule(const char* n, unsigned sz,const std::function<void(unsigned)>&, const char* name, void* pmod);
 public:
 	static void SetPathToPythonRuntime(const char* path);
 	void InitRuntime();
@@ -16,6 +16,6 @@ public:
 	virtual void _cb_writedata();
 	virtual void _cb_readdata();
 	virtual void update();
-	_DevBase* CreateObj(const char* name_to_py);
+	_DevBase* CreateObj(const char* name_to_py, const std::function<void(unsigned)>&);
 	~PythonModule();
 };

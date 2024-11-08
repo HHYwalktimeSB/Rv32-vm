@@ -960,18 +960,24 @@ void CPUdebugger::writecpustate(_cpustate* s)
 	memcpy_s(s, sizeof(REGS), &(pcpu->regs), sizeof(REGS));
 }
 
+#include<iomanip>
+
 int CPUdebugger::cmpcpustate(const _cpustate* prevstate)
 {
 	int detect = 0;
 	for (int i = 0; i < 32; ++i) {
 		if (prevstate->regs.x[i] != pcpu->regs.x[i])
 		{
-			printf("change in x%d: %u->%u\n", i, prevstate->regs.x[i],pcpu->regs.x[i]);
+			//printf("change in x%d: %u->%u\n", i, prevstate->regs.x[i],pcpu->regs.x[i]);
+			std::cout << "change in x" << std::oct << i << ": " << std::hex << prevstate->regs.x[i]
+				<< "->" << pcpu->regs.x[i] << std::endl;
 			detect++;
 		}
 	}
 	if (prevstate->regs.pc != pcpu->regs.pc) {
-		printf("change in pc: %x->%x\n", prevstate->regs.pc, pcpu->regs.pc);
+		//printf("change in pc: %x->%x\n", prevstate->regs.pc, pcpu->regs.pc);
+		std::cout << "change in pc: " << std::hex << prevstate->regs.pc
+			<< "->" << pcpu->regs.pc << std::endl;
 		detect++;
 	}
 	return detect;
@@ -1009,18 +1015,9 @@ void CPUdebugger::simple_run()
 	auto s = clock();
 	pcpu->runsync_with_jit();
 	s = clock() - s;
-	std::cout <<"jit " << s << "\ncycles: " << pcpu->regs.cycles <<std::endl;
+	std::cout <<"time taked " << s << "ms\ncycles: " << pcpu->regs.cycles <<std::endl;
 	cmpcpustate(&st);
 	return;
-	setpc(0x80000000);
-	pcpu->regs.x[1] = 0;
-	s = clock();
-	pcpu->runsync();
-	s = clock() - s;
-	std::cout <<"no jit " << s << "\ncycles: " << pcpu->regs.x[1] << std::endl;
-	setpc(0x80000000);
-	pcpu->regs.x[1] = 0;
-	s = clock();
 }
 
 void CPUdebugger::quick_setup(unsigned int memsize)
