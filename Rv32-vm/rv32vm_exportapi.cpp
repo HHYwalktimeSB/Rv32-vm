@@ -101,6 +101,7 @@ MY_API int MYAPI_CC Vmmem_load_binary(unsigned src_paddr, const char* fn)
 
 MY_API int MYAPI_CC Vmmem_load_hex(const char* fn, unsigned dst_paddr)
 {
+    //printf("%s\n",fn);
     if (pVM == NULL)return -1;
     MemoryIoGuard = 1;
     auto x = pVM->loadmem_fromhexfile(fn, dst_paddr);

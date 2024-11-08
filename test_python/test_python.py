@@ -34,7 +34,7 @@ def initialize_vm():
 
 if(mylib.RV32vm_Init(c_int(1024*1024*4))!=0):
     print("fuck")
-print(mylib.Vmmem_load_hex('../x64/Debug/test.txt',c_uint(0x80000000)))
+print(mylib.Vmmem_load_hex(c_char_p(bytes("../x64/Debug/test.txt",encoding='utf-8')),c_uint(0x80000000)))
 mylib.Vm_RunSync()
 
 
